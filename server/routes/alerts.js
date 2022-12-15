@@ -14,10 +14,10 @@ export default function (services, router) {
       validate: {
         query: schema.object({
           from: schema.maybe(schema.number()),
-          size: schema.number(),
+          size: schema.maybe(schema.number()),
           search: schema.maybe(schema.string()),
-          sortField: schema.string(),
-          sortDirection: schema.string(),
+          sortField: schema.maybe(schema.string()),
+          sortDirection: schema.maybe(schema.string()),
           severityLevel: schema.maybe(schema.string()),
           alertState: schema.maybe(schema.string()),
           monitorIds: schema.maybe(schema.string()),

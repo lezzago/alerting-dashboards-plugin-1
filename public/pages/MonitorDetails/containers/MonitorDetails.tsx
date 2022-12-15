@@ -46,6 +46,11 @@ import { formikToMonitor } from '../../CreateMonitor/containers/CreateMonitor/ut
 import monitorToFormik from '../../CreateMonitor/containers/CreateMonitor/utils/monitorToFormik';
 import FindingsDashboard from '../../Dashboard/containers/FindingsDashboard';
 import { TABLE_TAB_IDS } from '../../Dashboard/components/FindingsDashboard/findingsUtils';
+import {
+  ISavedFeatureAnywhere,
+  createFeatureAnywhereSavedObject,
+  FeatureAnywhereSavedObject,
+} from '../../../../../../src/plugins/visualizations/public';
 
 export default class MonitorDetails extends Component {
   constructor(props) {
@@ -409,6 +414,49 @@ export default class MonitorDetails extends Component {
           </EuiFlexItem>
           <EuiFlexItem grow={false}>
             <EuiButton onClick={this.showJsonModal}>Export as JSON</EuiButton>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiButton
+              onClick={async () => {
+                console.log('creating saved obj for this monitor...');
+
+                // create the fields needed for the saved obj
+                const savedObjectToCreate = {
+                  pluginResourceId: monitorId,
+                  savedObjectId: '88de2c50-5497-11ed-a64a-558a28b48116',
+                  savedObjectType: 'visualization',
+                  augmentExpressionFn: {
+                    type: 'PointInTimeEventsVisLayer',
+                    name: 'overlay_alerts',
+                    args: {
+                      monitorId: monitorId,
+                    },
+                  },
+                } as ISavedFeatureAnywhere;
+
+                //console.log('saved obj to create: ', savedObjectToCreate);
+
+                // helper fn to create the saved object given an object implementing the
+                // ISavedFeatureAnywhere interface.
+                // Note that we actually don't have a hard dep on the feature anywhere loader yet,
+                // since we have a dependency on visualizations which has a dependency on the
+                // feature anywhere loader. But we will probably need later when
+                // using the loader's search functionalities within the UI components.
+
+                // TODO: handle failures if it fails to create
+                let newSavedObj = (await createFeatureAnywhereSavedObject(
+                  savedObjectToCreate
+                )) as FeatureAnywhereSavedObject;
+
+                console.log("savedOecjts: ", newSavedObj);
+
+                // calling save() on the newly-created saved object to actually save it to the system index
+                const response = await newSavedObj.save({});
+                console.log('response: ', response);
+              }}
+            >
+              {'Create saved object'}
+            </EuiButton>
           </EuiFlexItem>
         </EuiFlexGroup>
         <EuiSpacer />
