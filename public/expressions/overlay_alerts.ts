@@ -32,32 +32,16 @@ import { get, cloneDeep } from 'lodash';
 import { i18n } from '@osd/i18n';
 import {
   OpenSearchDashboardsDatatable,
-  OpenSearchDashboardsDatatableRow,
   OpenSearchDashboardsDatatableColumn,
   ExpressionFunctionDefinition,
   ExprVisLayers,
 } from '../../../../src/plugins/expressions/public';
 import {
-  VisLayer,
-  VisLayers,
-  PointInTimeEvent,
-  PointInTimeEventsVisLayer,
-} from '../../../../src/plugins/visualizations/public';
-import {
-  Filter,
-  Query,
   TimeRange,
   calculateBounds,
 } from '../../../../src/plugins/data/common';
-//import { getParsedValue } from '../../../../src/plugins/expressions/common';
-// import {
-//   getAnomalySummaryQuery,
-//   parsePureAnomalies,
-// } from '../pages/utils/anomalyResultUtils';
-// import { AD_NODE_API } from '../../utils/constants';
-// import { AnomalyData } from '../models/interfaces';
 import { getClient } from '../services';
-import { MAX_ALERT_COUNT } from '../../utils/constants';
+import { VisLayers, VisLayerTypes, PointInTimeEventsVisLayer } from '../../../../src/plugins/vis_augmenter/public';
 
 type Input = ExprVisLayers;
 type Output = Promise<ExprVisLayers>;
@@ -76,58 +60,31 @@ const getAlerts = async (
   startTime: number,
   endTime: number
 ): Promise<String> => {
-  // get the raw anomalies + aggs (aggs may not be needed, but leave in for now)
-  // const anomalySummaryQuery = getAnomalySummaryQuery(
-  //   startTime,
-  //   endTime,
-  //   detectorId,
-  //   undefined,
-  //   // regularly this should be false. setting to true to use historical
-  //   // to quickly get some results
-  //   // false
-  //   // TODO: remove this and set to false when done testing
-  //   true
-  // );
 
   const params = {
-    size: MAX_ALERT_COUNT,
-    // sortField,
-    // sortDirection,
+    size: 1000,
+    sortField: 'start_time',
+    sortDirection: 'asc',
     // severityLevel,
     // alertState,
-    monitorIds: [monitorId],
+    // monitorIds: [monitorId],
   };
 
-  const resp = await getClient().post( '/api/alerting/alerts', { query: params } );
+  console.log('getting alerts');
+
+  const resp = await getClient().get( '/api/alerting/alerts', { query: params } );
 
   if (resp.ok) {
     const { alerts } = resp;
+
+    // added filter for monitor id since there is a bug in the backend for the alerts api
     alerts.filter((alert) => (alert.start_time >= startTime && alert.start_time <= endTime))
-
-
-    // const filteredAlerts = _.filter(alerts, { trigger_id: triggerId });
-    // this.setState({
-    //   ...this.state,
-    //   alerts: filteredAlerts,
-    //   totalAlerts: filteredAlerts.length,
-    // });
+      .filter((alert) => (alert.monitorId == monitorId))
+    return alerts;
   } else {
     console.log('error getting alerts:', resp);
-    // backendErrorNotification(notifications, 'get', 'alerts', resp.err);
   }
-
-  // We set the http client in the plugin.ts setup() fn. We pull it in here to make a
-  // server-side call directly.
-  //
-  // Note we can't use the redux fns here (e.g., searchResults()) since it requires
-  // hooks (e.g., useDispatch()) which doesn't make sense in this context, plus is not allowed by React.
-  // const anomalySummaryResponse = await getClient().post(
-  //   `..${AD_NODE_API.DETECTOR}/results/_search`,
-  //   {
-  //     body: JSON.stringify(anomalySummaryQuery),
-  //   }
-  // );
-  return alerts;
+  return '';
 };
 
 const convertAlertsToLayer = (
@@ -137,12 +94,13 @@ const convertAlertsToLayer = (
     return {
       timestamp: alert.start_time + (alert.end_time - alert.start_time) / 2,
       metadata: {},
-    } as PointInTimeEvent;
+    };
   });
   return {
-    name: 'alert-events',
+    originPlugin: 'Alerting',
     events: events,
-    format: 'some-format',
+    pluginResource: 'AlertingPlugin',
+    type: VisLayerTypes.PointInTimeEvents
   } as PointInTimeEventsVisLayer;
 };
 
@@ -271,29 +229,6 @@ export const overlayAlertsFunction =
       );
 
       const alertLayer = convertAlertsToLayer(alerts);
-
-      // const augmentedTable = appendAnomaliesToTable(origDatatable, anomalies);
-      // const updatedVisConfig = appendAdDimensionToConfig(
-      //   origVisConfig,
-      //   augmentedTable
-      // );
-
-      // const table: OpenSearchDashboardsdatatable = {
-      //   type: 'opensearch_dashboards_datatable',
-      //   rows: augmentedTable.rows,
-      //   columns: augmentedTable.columns.map((column: any) => {
-      //     const cleanedColumn: OpenSearchDashboardsdatatableColumn = {
-      //       id: column.id,
-      //       name: column.name,
-      //       meta: serializeAggConfig(column.aggConfig),
-      //     };
-      //     if (args.includeFormatHints) {
-      //       cleanedColumn.formatHint =
-      //         column.aggConfig.toSerializedFieldFormat();
-      //     }
-      //     return cleanedColumn;
-      //   }),
-      // };
 
       // adding the anomaly layer to the list of VisLayers
       return {
