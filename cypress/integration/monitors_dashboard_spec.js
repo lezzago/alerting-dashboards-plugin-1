@@ -86,6 +86,9 @@ describe('Monitors dashboard page', () => {
 
         // Create the test monitors
         testMonitors.forEach((entry) => cy.createAndExecuteMonitor(entry.monitor));
+
+        // Wait one minute to reduce flakiness and to ensure the monitor have been created and executed
+        cy.wait(60000);
       });
 
     // Visit Alerting OpenSearch Dashboards
