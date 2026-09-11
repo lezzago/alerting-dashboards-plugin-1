@@ -1,0 +1,94 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`AddAlertingMonitor renders 1`] = `
+<div
+  className="add-alerting-monitor"
+>
+  <Formik
+    initialValues={
+      Object {
+        "adResultIndex": undefined,
+        "aggregationType": "count",
+        "aggregations": Array [],
+        "associatedMonitors": Object {
+          "sequence": Object {
+            "delegates": Array [],
+          },
+        },
+        "associatedMonitorsEditor": "",
+        "associatedMonitorsList": Array [],
+        "bucketUnitOfTime": "h",
+        "bucketValue": 1,
+        "clusterNames": Array [],
+        "cronExpression": "0 */1 * * *",
+        "daily": 0,
+        "description": "",
+        "detectorId": "",
+        "disabled": false,
+        "fieldName": Array [],
+        "filters": Array [],
+        "frequency": "interval",
+        "groupBy": Array [],
+        "groupByField": Array [
+          Object {
+            "label": "",
+          },
+        ],
+        "groupedOverFieldName": "bytes",
+        "groupedOverTop": 5,
+        "index": Array [],
+        "lookBackAmount": 1,
+        "lookBackUnit": "hours",
+        "monitor_mode": "ppl",
+        "monitor_type": "query_level_monitor",
+        "monthly": Object {
+          "day": 1,
+          "type": "day",
+        },
+        "name": "",
+        "overDocuments": "all documents",
+        "period": Object {
+          "interval": 1,
+          "unit": "MINUTES",
+        },
+        "pplPreviewError": null,
+        "pplPreviewResult": null,
+        "pplQuery": "",
+        "preventVisualEditor": false,
+        "queries": Array [],
+        "query": "{
+    \\"size\\": 0,
+    \\"query\\": {
+        \\"match_all\\": {}
+    }
+}",
+        "searchType": "graph",
+        "timeField": "",
+        "timestampField": "",
+        "timezone": Array [],
+        "uri": Object {
+          "api_type": "",
+          "clusters": Array [],
+          "path": "",
+          "path_params": "",
+          "url": "",
+        },
+        "useLookBackWindow": false,
+        "weekly": Object {
+          "fri": false,
+          "mon": false,
+          "sat": false,
+          "sun": false,
+          "thur": false,
+          "tue": false,
+          "wed": false,
+        },
+      }
+    }
+    onSubmit={[Function]}
+    validateOnChange={false}
+  >
+    <Component />
+  </Formik>
+</div>
+`;

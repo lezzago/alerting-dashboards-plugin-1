@@ -1,10 +1,11 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`Home renders 1`] = `
 <div>
   <div
-    class="euiTabs"
+    class="euiTabs euiTabs--small"
     role="tablist"
+    style="padding:16px 16px 0px"
   >
     <button
       aria-selected="true"
@@ -44,7 +45,7 @@ exports[`Home renders 1`] = `
     </button>
   </div>
   <div
-    style="padding:25px 25px"
+    style="padding:16px"
   />
 </div>
 `;

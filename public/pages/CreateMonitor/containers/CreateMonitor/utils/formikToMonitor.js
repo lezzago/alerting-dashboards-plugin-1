@@ -8,11 +8,19 @@ import moment from 'moment-timezone';
 import { BUCKET_COUNT, DEFAULT_COMPOSITE_AGG_SIZE, FORMIK_INITIAL_VALUES } from './constants';
 import { MONITOR_TYPE, SEARCH_TYPE } from '../../../../../utils/constants';
 import { OPERATORS_QUERY_MAP } from './whereFilters';
-import { API_TYPES } from '../../../components/ClusterMetricsMonitor/utils/clusterMetricsMonitorConstants';
+import {
+  API_TYPES,
+  URL_DEFAULT_PREFIX,
+} from '../../../components/ClusterMetricsMonitor/utils/clusterMetricsMonitorConstants';
 import {
   getApiPath,
   getApiType,
 } from '../../../components/ClusterMetricsMonitor/utils/clusterMetricsMonitorHelpers';
+import {
+  COMPOSITE_INPUT_FIELD,
+  DOC_LEVEL_INPUT_FIELD,
+  DOC_LEVEL_QUERY_MAP,
+} from '../../../components/DocumentLevelMonitorQueries/utils/constants';
 
 export function formikToMonitor(values) {
   const uiSchedule = formikToUiSchedule(values);
@@ -22,13 +30,41 @@ export function formikToMonitor(values) {
     switch (values.monitor_type) {
       case MONITOR_TYPE.DOC_LEVEL:
         return {
-          doc_level_input: formikToDocLevelQueriesUiMetadata(values),
+          [DOC_LEVEL_INPUT_FIELD]: formikToDocLevelQueriesUiMetadata(values),
+          search: { searchType: values.searchType },
+        };
+      case MONITOR_TYPE.COMPOSITE_LEVEL:
+        return {
+          [COMPOSITE_INPUT_FIELD]: formikToCompositeUiMetadata(values),
           search: { searchType: values.searchType },
         };
       default:
         return { search: formikToUiSearch(values) };
     }
   };
+
+  if (values.monitor_type === MONITOR_TYPE.COMPOSITE_LEVEL) {
+    const enabled_time = new Date();
+    return {
+      last_update_time: enabled_time.getTime(),
+      owner: 'alerting',
+      type: 'workflow',
+      enabled_time: enabled_time.getTime(),
+      enabled: !values.disabled,
+      monitor_type: MONITOR_TYPE.COMPOSITE_LEVEL,
+      workflow_type: MONITOR_TYPE.COMPOSITE_LEVEL,
+      schema_version: 0,
+      name: values.name,
+      schedule,
+      inputs: [formikToInputs(values)],
+      triggers: [],
+      ui_metadata: {
+        schedule: uiSchedule,
+        monitor_type: values.monitor_type,
+        ...monitorUiMetadata(),
+      },
+    };
+  }
 
   return {
     name: values.name,
@@ -52,9 +88,17 @@ export function formikToInputs(values) {
       return formikToClusterMetricsInput(values);
     case MONITOR_TYPE.DOC_LEVEL:
       return formikToDocLevelInput(values);
+    case MONITOR_TYPE.COMPOSITE_LEVEL:
+      return formikToCompositeInput(values);
     default:
       return formikToSearch(values);
   }
+}
+
+export function formikToCompositeInput(values) {
+  return {
+    composite_input: values.associatedMonitors,
+  };
 }
 
 export function formikToSearch(values) {
@@ -113,20 +157,28 @@ export function formikToClusterMetricsInput(values) {
   if (_.isEmpty(apiType)) apiType = getApiType(_.get(values, 'uri'));
   let pathParams = _.get(values, 'uri.path_params', FORMIK_INITIAL_VALUES.uri.path_params);
   pathParams = _.trim(pathParams);
+  // Trim '/' characters from the beginning and end of the path
+  pathParams = pathParams?.replace(/^\/+|\/+$/g, '');
   const hasPathParams = !_.isEmpty(pathParams);
-  if (hasPathParams) _.concat(pathParams, _.get(API_TYPES, `${apiType}.appendText`, ''));
-  let path = _.get(values, 'uri.path', FORMIK_INITIAL_VALUES.uri.path);
-  if (_.isEmpty(path)) path = getApiPath(hasPathParams, apiType);
-  const canConstructUrl = !_.isEmpty(apiType);
-  const url = canConstructUrl
-    ? `http://localhost:9200/${path}${pathParams}`
-    : FORMIK_INITIAL_VALUES.uri.url;
+  const path = getApiPath(hasPathParams, apiType);
+  let url = FORMIK_INITIAL_VALUES.uri.url;
+  if (!_.isEmpty(apiType)) {
+    url = URL_DEFAULT_PREFIX;
+    if (!_.isEmpty(path)) url = url + '/' + path;
+    if (hasPathParams) {
+      pathParams = '/' + pathParams;
+      url = url + pathParams + _.get(API_TYPES, `${apiType}.appendText`, '');
+    }
+  }
+  const clusterNames = _.get(values, 'clusterNames', []);
+
   return {
     uri: {
       api_type: apiType,
       path: path,
       path_params: pathParams,
       url: url,
+      clusters: clusterNames,
     },
   };
 }
@@ -140,28 +192,25 @@ export function formikToAd(values) {
 }
 
 export function formikToUiSearch(values) {
-  const {
-    searchType,
-    timeField,
-    aggregations,
-    groupBy,
-    bucketValue,
-    bucketUnitOfTime,
-    where,
-  } = values;
+  const { searchType, timeField, aggregations, groupBy, bucketValue, bucketUnitOfTime, filters } =
+    values;
+  const cleanedGroupBy = groupBy.filter((item) => item !== '');
   return {
     searchType,
     timeField,
     aggregations,
-    groupBy,
+    groupBy: cleanedGroupBy,
     bucketValue,
     bucketUnitOfTime,
-    where,
+    filters,
   };
 }
 
 export function formikToIndices(values) {
-  return values.index.map(({ label }) => label);
+  const hasRemoteClusters = values.index.some(
+    ({ cluster, value }) => !_.isEmpty(cluster) && !_.isEmpty(value)
+  );
+  return values.index.map(({ label, value }) => (hasRemoteClusters ? value : label));
 }
 
 export function formikToQuery(values) {
@@ -192,9 +241,8 @@ export function formikToGraphQuery(values) {
         return formikToAggregation(values);
     }
   };
-
   const timeField = values.timeField;
-  const filters = [
+  let filters = [
     {
       range: {
         [timeField]: {
@@ -205,10 +253,8 @@ export function formikToGraphQuery(values) {
       },
     },
   ];
-  const whereClause = formikToWhereClause(values);
-  if (whereClause) {
-    filters.push({ ...whereClause });
-  }
+  const whereFilters = formikToWhereClause(values);
+  if (whereFilters.length) filters = filters.concat(whereFilters);
   return {
     size: 0,
     aggregations: aggregation(),
@@ -228,15 +274,9 @@ export function formikToDocLevelInput(values) {
     case SEARCH_TYPE.GRAPH:
       description = values.description;
       queries = queries.map((query) => {
-        const formikToQuery =
-          query.operator === '=='
-            ? `${query.field}:\"${query.query}\"`
-            : JSON.stringify({
-                bool: { must_not: { term: { [query.field]: `\"${query.query}\"` } } },
-              });
+        const formikToQuery = DOC_LEVEL_QUERY_MAP[query.operator].query(query);
         return {
-          // id: query.id, // TODO FIXME: Refactor to this assignment logic once backend generates its own ID value
-          id: query.queryName,
+          id: query.id,
           name: query.queryName,
           query: formikToQuery,
           tags: query.tags,
@@ -263,7 +303,7 @@ export function formikToDocLevelInput(values) {
   }
 
   return {
-    doc_level_input: {
+    [DOC_LEVEL_INPUT_FIELD]: {
       description: description,
       indices: indices,
       queries: queries,
@@ -273,6 +313,13 @@ export function formikToDocLevelInput(values) {
 
 export function formikToDocLevelQueriesUiMetadata(values) {
   return { queries: _.get(values, 'queries', []) };
+}
+
+export function formikToCompositeUiMetadata(values) {
+  return {
+    associatedMonitors: _.get(values, 'associatedMonitors', []),
+    query: _.get(values, '', ''),
+  };
 }
 
 export function formikToCompositeAggregation(values) {
@@ -336,7 +383,7 @@ export function formikToUiGraphQuery(values) {
     ? formikToUiCompositeAggregation(values)
     : formikToUiOverAggregation(values);
   const timeField = values.timeField;
-  const filters = [
+  let filters = [
     {
       range: {
         [timeField]: {
@@ -347,10 +394,8 @@ export function formikToUiGraphQuery(values) {
       },
     },
   ];
-  const whereClause = formikToWhereClause(values);
-  if (whereClause) {
-    filters.push({ ...whereClause });
-  }
+  const whereFilters = formikToWhereClause(values);
+  if (whereFilters.length) filters = filters.concat(whereFilters);
   return {
     size: 0,
     aggregations: aggregation,
@@ -394,10 +439,8 @@ export function formikToUiOverAggregation(values) {
   };
 }
 
-export function formikToWhereClause({ where }) {
-  if (where.fieldName.length > 0) {
-    return OPERATORS_QUERY_MAP[where.operator].query(where);
-  }
+export function formikToWhereClause({ filters = [] }) {
+  return filters.map((filter) => OPERATORS_QUERY_MAP[filter.operator].query(filter));
 }
 
 // For query-level monitor single metric selection

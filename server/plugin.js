@@ -10,55 +10,203 @@ import {
   DestinationsService,
   OpensearchService,
   MonitorService,
+  PplAlertingMonitorService,
   AnomalyDetectorService,
   FindingService,
+  CrossClusterService,
+  CommentsService,
 } from './services';
-import { alerts, destinations, opensearch, monitors, detectors, findings } from '../server/routes';
+import { FEATURE_FLAGS } from './services/utils/constants';
+import {
+  alerts,
+  destinations,
+  opensearch,
+  monitors,
+  pplAlertingMonitors,
+  detectors,
+  findings,
+  crossCluster,
+  comments,
+} from '../server/routes';
+import { getDynamicConfig } from './services/utils/helpers';
+import { getWorkspaceState } from '../../../src/core/server/utils';
+import { MDSEnabledClientService } from './services/MDSEnabledClientService';
 
 export class AlertingPlugin {
   constructor(initializerContext) {
     this.logger = initializerContext.logger.get();
     this.globalConfig$ = initializerContext.config.legacy.globalConfig$;
+    this.pluginConfig$ = initializerContext.config.create();
+    this.core = null;
+    this.services = null;
   }
 
-  async setup(core) {
+  async setup(core, { dataSource, neoDashboardsOasisPlugin }) {
+    this.core = core;
+
+    // Get oasis observability client from NeoDashboardsOasisPlugin (available at setup time)
+    const oasisEnabled = !!neoDashboardsOasisPlugin?.observability;
+    if (oasisEnabled) {
+      const oasisClient = neoDashboardsOasisPlugin.observability.getClient();
+      MDSEnabledClientService.setOasisObservabilityClient(oasisClient);
+    }
+
     // Get the global configuration settings of the cluster
     const globalConfig = await this.globalConfig$.pipe(first()).toPromise();
+    const pluginConfig = await this.pluginConfig$.pipe(first()).toPromise();
+
+    const dataSourceEnabled = !!dataSource;
+    const defaultPplEnabled = Boolean(pluginConfig?.pplAlertingEnabled);
 
     // Create clusters
-    const alertingESClient = createAlertingCluster(core, globalConfig);
-    const adESClient = createAlertingADCluster(core, globalConfig);
+    const alertingESClient = createAlertingCluster(
+      core,
+      globalConfig,
+      dataSourceEnabled,
+      dataSource
+    );
+    const adESClient = createAlertingADCluster(core, globalConfig, dataSourceEnabled, dataSource);
 
     // Initialize services
-    const alertService = new AlertService(alertingESClient);
-    const opensearchService = new OpensearchService(alertingESClient);
-    const monitorService = new MonitorService(alertingESClient);
-    const destinationsService = new DestinationsService(alertingESClient);
-    const anomalyDetectorService = new AnomalyDetectorService(adESClient);
-    const findingService = new FindingService(alertingESClient);
+    const alertService = new AlertService(alertingESClient, dataSourceEnabled);
+    const opensearchService = new OpensearchService(alertingESClient, dataSourceEnabled);
+    const monitorService = new MonitorService(alertingESClient, dataSourceEnabled);
+    const pplMonitorService = new PplAlertingMonitorService(
+      alertingESClient,
+      dataSourceEnabled,
+      this.logger
+    );
+    const destinationsService = new DestinationsService(alertingESClient, dataSourceEnabled);
+    const anomalyDetectorService = new AnomalyDetectorService(adESClient, dataSourceEnabled);
+    const findingService = new FindingService(alertingESClient, dataSourceEnabled);
+    const crossClusterService = new CrossClusterService(alertingESClient, dataSourceEnabled);
+    const commentsService = new CommentsService(alertingESClient, dataSourceEnabled);
     const services = {
       alertService,
       destinationsService,
       opensearchService,
       monitorService,
+      pplMonitorService,
       anomalyDetectorService,
       findingService,
+      crossClusterService,
+      commentsService,
     };
+    this.services = services;
+
+    core.capabilities.registerProvider(() => ({
+      alertingDashboards: {
+        pplV2: defaultPplEnabled,
+        serverlessEnabled: false,
+      },
+    }));
+
+    core.capabilities.registerSwitcher(async (request) => {
+      try {
+        const config = await getDynamicConfig(request, this.core);
+        const pplAlertingEnabled = !!config[FEATURE_FLAGS.PPL_MONITOR];
+        const isServerlessAlertingAllowlisted = !!config[FEATURE_FLAGS.SERVERLESS];
+
+        return {
+          alertingDashboards: {
+            pplV2: pplAlertingEnabled,
+            serverlessEnabled: oasisEnabled && isServerlessAlertingAllowlisted,
+          },
+        };
+      } catch (e) {
+        this.logger.warn(
+          `[Alerting] Failed to get dynamic config in capabilities switcher: ${e.message ?? e}`
+        );
+        return {
+          alertingDashboards: {
+            serverlessEnabled: false,
+          },
+        };
+      }
+    });
 
     // Create router
     const router = core.http.createRouter();
+
+    // Routes that return 501 on unsupported (e.g. serverless) endpoints.
+    const unsupportedRoutes = new Set([
+      'POST /api/alerting/workflows',
+      'GET /api/alerting/workflows/{id}',
+      'PUT /api/alerting/workflows/{id}',
+      'DELETE /api/alerting/workflows/{id}',
+      'POST /api/alerting/workflows/{id}/_acknowledge/alerts',
+      'POST /api/alerting/comments/_search',
+      'POST /api/alerting/comments/{alertId}',
+      'PUT /api/alerting/comments/{commentId}',
+      'DELETE /api/alerting/comments/{commentId}',
+      'GET /api/alerting/destinations',
+      'GET /api/alerting/destinations/{destinationId}',
+      'POST /api/alerting/destinations',
+      'PUT /api/alerting/destinations/{destinationId}',
+      'DELETE /api/alerting/destinations/{destinationId}',
+      'GET /api/alerting/destinations/email_accounts',
+      'POST /api/alerting/destinations/email_accounts',
+      'GET /api/alerting/destinations/email_accounts/{id}',
+      'PUT /api/alerting/destinations/email_accounts/{id}',
+      'DELETE /api/alerting/destinations/email_accounts/{id}',
+      'GET /api/alerting/destinations/email_groups',
+      'POST /api/alerting/destinations/email_groups',
+      'GET /api/alerting/destinations/email_groups/{id}',
+      'PUT /api/alerting/destinations/email_groups/{id}',
+      'DELETE /api/alerting/destinations/email_groups/{id}',
+      'GET /api/alerting/findings/_search',
+    ]);
+
+    // Wrap router to auto-reject unsupported routes on serverless endpoints.
+    const guardedRouter = ['get', 'post', 'put', 'delete'].reduce((proxy, method) => {
+      proxy[method] = (route, handler) => {
+        const key = `${method.toUpperCase()} ${route.path}`;
+        if (unsupportedRoutes.has(key)) {
+          router[method](route, async (context, req, res) => {
+            const rejected = await monitorService.rejectIfUnsupported(context, req, res);
+            if (rejected) return rejected;
+            return handler(context, req, res);
+          });
+        } else {
+          router[method](route, handler);
+        }
+      };
+      return proxy;
+    }, {});
+
     // Add server routes
-    alerts(services, router);
-    destinations(services, router);
-    opensearch(services, router);
-    monitors(services, router);
-    detectors(services, router);
-    findings(services, router);
+    alerts(services, guardedRouter, dataSourceEnabled);
+    destinations(services, guardedRouter, dataSourceEnabled);
+    opensearch(services, guardedRouter, dataSourceEnabled);
+    monitors(services, guardedRouter, dataSourceEnabled);
+    detectors(services, guardedRouter, dataSourceEnabled);
+    findings(services, guardedRouter, dataSourceEnabled);
+    crossCluster(services, guardedRouter, dataSourceEnabled);
+    comments(services, guardedRouter, dataSourceEnabled);
+    pplAlertingMonitors(services, guardedRouter, dataSourceEnabled, core, this.logger);
 
     return {};
   }
 
-  async start(core) {
+  async start(core, plugins) {
+    if (this.services) {
+      const workspaceIdGetter = (request) => {
+        try {
+          return getWorkspaceState(request).requestWorkspaceId;
+        } catch (e) {
+          return undefined;
+        }
+      };
+
+      Object.values(this.services).forEach((service) => {
+        if (plugins?.workspace && typeof service.setWorkspaceStart === 'function') {
+          service.setWorkspaceStart(plugins.workspace);
+        }
+        if (typeof service.setWorkspaceIdGetter === 'function') {
+          service.setWorkspaceIdGetter(workspaceIdGetter);
+        }
+      });
+    }
     return {};
   }
 }

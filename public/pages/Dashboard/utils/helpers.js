@@ -33,6 +33,9 @@ export function addFirstAlert(firstAlert) {
     last_notification_time,
     monitor_name,
     monitor_id,
+    workflow_id,
+    workflow_name,
+    alert_source,
   } = firstAlert;
   let newAlertList = _.cloneDeep(EMPTY_ALERT_LIST);
   newAlertList[state]++;
@@ -45,8 +48,9 @@ export function addFirstAlert(firstAlert) {
     severity,
     start_time,
     last_notification_time,
-    monitor_name,
-    monitor_id,
+    monitor_name: monitor_name || workflow_name,
+    monitor_id: monitor_id || workflow_id,
+    alert_source,
   };
 }
 
@@ -71,9 +75,9 @@ export const renderEmptyValue = (value) => {
 export function insertGroupByColumn(groupBy = []) {
   let result = _.cloneDeep(bucketColumns);
   groupBy.map((fieldName) =>
-    result.splice(0, 0, {
+    result.push({
       field: `agg_alert_content.bucket.key.${fieldName}`,
-      name: fieldName,
+      name: _.capitalize(fieldName),
       render: renderEmptyValue,
       sortable: false,
       truncateText: false,
@@ -150,4 +154,47 @@ export function getURLQueryParams(location) {
     severityLevel,
     alertState,
   };
+}
+
+export function findLongestStringField(pplRes) {
+  if (!pplRes || !pplRes.body || !Array.isArray(pplRes.body.schema) || !Array.isArray(pplRes.body.datarows)) {
+    return '';
+  }
+
+  const { schema, datarows } = pplRes.body;
+
+  if (schema.length === 0 || datarows.length === 0) return '';
+
+  let longestField = '';
+  let maxLength = 0;
+
+  // Iterate over schema and find the longest length string field name
+  schema.forEach((field, index) => {
+    if (field.type === 'string') {
+      const fieldValue = datarows[0][index];
+      if (fieldValue) {
+        const fieldLength = fieldValue.length;
+        if (fieldLength > maxLength) {
+          maxLength = fieldLength;
+          longestField = field.name;
+        }
+      }
+    }
+  });
+
+  return longestField;
+}
+
+export async function searchQuery(httpClient, path, method, dataSourceQuery, query) {
+  return await httpClient.post(`/api/console/proxy`, {
+    query: {
+      path: path,
+      method: method,
+      dataSourceId: dataSourceQuery ? dataSourceQuery.query.dataSourceId : '',
+    },
+    body: query,
+    prependBasePath: true,
+    asResponse: true,
+    withLongNumeralsSupport: true,
+  });
 }

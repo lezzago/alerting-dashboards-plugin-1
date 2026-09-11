@@ -1,27 +1,38 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`CreateMonitor renders 1`] = `
 <div
   style={
     Object {
-      "padding": "25px 50px",
+      "padding": "16px",
     }
   }
 >
   <Formik
+    enableReinitialize={true}
     initialValues={
       Object {
         "adResultIndex": undefined,
         "aggregationType": "count",
         "aggregations": Array [],
+        "associatedMonitors": Object {
+          "sequence": Object {
+            "delegates": Array [],
+          },
+        },
+        "associatedMonitorsEditor": "",
+        "associatedMonitorsList": Array [],
         "bucketUnitOfTime": "h",
         "bucketValue": 1,
+        "clusterNames": Array [],
         "cronExpression": "0 */1 * * *",
         "daily": 0,
+        "dataSourceEndpoint": "",
         "description": "",
         "detectorId": "",
         "disabled": false,
         "fieldName": Array [],
+        "filters": Array [],
         "frequency": "interval",
         "groupBy": Array [],
         "groupByField": Array [
@@ -32,6 +43,9 @@ exports[`CreateMonitor renders 1`] = `
         "groupedOverFieldName": "bytes",
         "groupedOverTop": 5,
         "index": Array [],
+        "lookBackAmount": 1,
+        "lookBackUnit": "hours",
+        "monitor_mode": "ppl",
         "monitor_type": "query_level_monitor",
         "monthly": Object {
           "day": 1,
@@ -43,6 +57,10 @@ exports[`CreateMonitor renders 1`] = `
           "interval": 1,
           "unit": "MINUTES",
         },
+        "pplPreviewError": null,
+        "pplPreviewResult": null,
+        "pplQuery": "",
+        "preventVisualEditor": false,
         "queries": Array [],
         "query": "{
     \\"size\\": 0,
@@ -52,13 +70,16 @@ exports[`CreateMonitor renders 1`] = `
 }",
         "searchType": "graph",
         "timeField": "",
+        "timestampField": "",
         "timezone": Array [],
         "uri": Object {
           "api_type": "",
+          "clusters": Array [],
           "path": "",
           "path_params": "",
           "url": "",
         },
+        "useLookBackWindow": false,
         "weekly": Object {
           "fri": false,
           "mon": false,
@@ -67,13 +88,6 @@ exports[`CreateMonitor renders 1`] = `
           "thur": false,
           "tue": false,
           "wed": false,
-        },
-        "where": Object {
-          "fieldName": Array [],
-          "fieldRangeEnd": 0,
-          "fieldRangeStart": 0,
-          "fieldValue": "",
-          "operator": "is",
         },
       }
     }

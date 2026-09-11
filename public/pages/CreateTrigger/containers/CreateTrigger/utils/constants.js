@@ -9,6 +9,8 @@ export const TRIGGER_TYPE = {
   ALERT_TRIGGER: 'alerting_trigger',
   QUERY_LEVEL: 'query_level_trigger',
   DOC_LEVEL: 'document_level_trigger',
+  COMPOSITE_LEVEL: 'chained_alert_trigger',
+  PPL: 'ppl_trigger',
 };
 
 export const FORMIK_INITIAL_BUCKET_SELECTOR_VALUES = {
@@ -63,14 +65,24 @@ export const FORMIK_INITIAL_TRIGGER_VALUES = {
     anomalyConfidenceThresholdValue: 0.7,
     anomalyConfidenceThresholdEnum: 'ABOVE',
   },
-  where: {
-    fieldName: [],
-    operator: 'includes',
-    fieldValue: '',
-    fieldRangeStart: 0,
-    fieldRangeEnd: 0,
-  },
+  filters: [], // array of FORMIK_INITIAL_WHERE_EXPRESSION_VALUES with default 'operator' of 'includes'
   actions: undefined,
+};
+
+export const FORMIK_COMPOSITE_INITIAL_TRIGGER_VALUES = {
+  name: '',
+  severity: '1',
+  script: {
+    lang: 'painless',
+    source: ``,
+  },
+  triggerConditions: '',
+  actions: undefined,
+};
+
+export const FORMIK_INITIAL_DOC_LEVEL_SCRIPT = {
+  lang: FORMIK_INITIAL_TRIGGER_VALUES.script.lang,
+  source: '(query[name=<queryName>] || query[name=<queryName>]) && query[tag=<queryTag>]',
 };
 
 export const HITS_TOTAL_RESULTS_PATH = 'ctx.results[0].hits.total.value';

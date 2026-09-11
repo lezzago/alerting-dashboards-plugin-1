@@ -1,9 +1,9 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`QueryPerformance renders 1`] = `
 <div
-  class="euiPanel euiPanel--paddingMedium"
-  style="padding-left:10px;padding-right:10px"
+  class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusMedium euiPanel--plain euiPanel--hasShadow"
+  style="padding:16px;padding-left:10px;padding-right:10px"
 >
   <div
     class="euiFlexGroup euiFlexGroup--gutterLarge euiFlexGroup--alignItemsCenter euiFlexGroup--justifyContentSpaceBetween euiFlexGroup--directionRow euiFlexGroup--responsive"
@@ -12,11 +12,13 @@ exports[`QueryPerformance renders 1`] = `
     <div
       class="euiFlexItem"
     >
-      <h3
-        class="euiTitle euiTitle--small"
+      <div
+        class="euiText euiText--small"
       >
-        Monitor performance
-      </h3>
+        <h2>
+          Monitor performance
+        </h2>
+      </div>
     </div>
     <div
       class="euiFlexItem euiFlexItem--flexGrowZero"
@@ -36,22 +38,7 @@ exports[`QueryPerformance renders 1`] = `
   >
     <div
       class="euiTextColor euiTextColor--subdued"
-    >
-      <span>
-        Check the performance of your query and make sure to follow best practices. 
-        <a
-          class="euiLink euiLink--primary"
-          href="https://docs-beta.opensearch.org/monitoring-plugins/alerting/"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          Learn more
-          <div>
-            EuiIconMock
-          </div>
-        </a>
-      </span>
-    </div>
+    />
   </div>
   <hr
     class="euiHorizontalRule euiHorizontalRule--full euiHorizontalRule--marginXSmall"

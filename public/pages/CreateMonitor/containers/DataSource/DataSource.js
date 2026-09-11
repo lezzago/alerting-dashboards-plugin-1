@@ -16,8 +16,11 @@ const propTypes = {
   dataTypes: PropTypes.object.isRequired,
   httpClient: PropTypes.object.isRequired,
   notifications: PropTypes.object.isRequired,
+  isMinimal: PropTypes.bool,
 };
-
+const defaultProps = {
+  isMinimal: false,
+};
 class DataSource extends Component {
   constructor(props) {
     super(props);
@@ -30,24 +33,47 @@ class DataSource extends Component {
   }
 
   render() {
+    const { isMinimal, canCallGetRemoteIndexes, remoteMonitoringEnabled } = this.props;
     const { monitor_type, searchType } = this.props.values;
     const displayTimeField =
-      searchType === SEARCH_TYPE.GRAPH && monitor_type !== MONITOR_TYPE.DOC_LEVEL;
+      searchType === SEARCH_TYPE.GRAPH &&
+      monitor_type !== MONITOR_TYPE.DOC_LEVEL &&
+      monitor_type !== MONITOR_TYPE.CLUSTER_METRICS;
+    const monitorIndexDisplay = (
+      <>
+        <MonitorIndex
+          httpClient={this.props.httpClient}
+          monitorType={monitor_type}
+          canCallGetRemoteIndexes={canCallGetRemoteIndexes}
+          remoteMonitoringEnabled={remoteMonitoringEnabled}
+          landingDataSourceId={this.props.landingDataSourceId}
+        />
+
+        {displayTimeField && (
+          <>
+            <EuiSpacer />
+            <MonitorTimeField dataTypes={this.props.dataTypes} />
+          </>
+        )}
+      </>
+    );
+
+    if (isMinimal) {
+      return { monitorIndexDisplay };
+    }
     return (
       <ContentPanel
-        title="Data source"
+        title="Select data"
         titleSize="s"
-        panelStyles={{ paddingLeft: '10px', paddingRight: '10px' }}
         bodyStyles={{ padding: 'initial' }}
       >
-        <MonitorIndex httpClient={this.props.httpClient} monitorType={monitor_type} />
-        <EuiSpacer size="s" />
-        {displayTimeField && <MonitorTimeField dataTypes={this.props.dataTypes} />}
+        {monitorIndexDisplay}
       </ContentPanel>
     );
   }
 }
 
 DataSource.propTypes = propTypes;
+DataSource.defaultProps = defaultProps;
 
 export default DataSource;

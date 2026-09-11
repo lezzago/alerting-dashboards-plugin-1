@@ -14,14 +14,15 @@ const props = {
   monitor: {
     triggers: [{ name: 'Random Trigger', severity: 1, actions: [{ name: 'Random Action' }] }],
   },
+  delegateMonitors: [],
   updateMonitor: jest.fn(),
-  onEditTrigger: jest.fn(),
-  onCreateTrigger: jest.fn(),
 };
 
-jest.mock('uuid/v4', () => {
+jest.mock('uuid', () => {
   let value = 0;
-  return () => value++;
+  return {
+    v4: () => value++,
+  };
 });
 
 function getShallowWrapper(customProps = {}) {
@@ -29,8 +30,30 @@ function getShallowWrapper(customProps = {}) {
 }
 
 describe('Triggers', () => {
+  let dateNowSpy;
+  let mathRandomSpy;
+
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
+    const dateReturns = [1700000000000, 1700000001000];
+    dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => {
+      if (dateReturns.length > 0) {
+        return dateReturns.shift();
+      }
+      return 1700000001000;
+    });
+    const randomReturns = [0.123456789, 0.987654321];
+    mathRandomSpy = jest.spyOn(Math, 'random').mockImplementation(() => {
+      if (randomReturns.length > 0) {
+        return randomReturns.shift();
+      }
+      return 0.987654321;
+    });
+  });
+
+  afterEach(() => {
+    dateNowSpy.mockRestore();
+    mathRandomSpy.mockRestore();
   });
   test('renders', () => {
     const wrapper = getShallowWrapper();
@@ -47,14 +70,6 @@ describe('Triggers', () => {
     wrapper.setProps({ monitor: { ...props.monitor, name: 'New Random Monitor' } });
     const diffTableKey = wrapper.instance().state.tableKey;
     expect(tableKey).not.toBe(diffTableKey);
-  });
-
-  test('onEdit calls onEditTrigger', () => {
-    const onEdit = jest.spyOn(Triggers.prototype, 'onEdit');
-    const wrapper = getShallowWrapper();
-    wrapper.instance().onEdit();
-    expect(onEdit).toHaveBeenCalled();
-    expect(props.onEditTrigger).toHaveBeenCalled();
   });
 
   test('onDelete calls updateMonitor with triggers to keep', () => {

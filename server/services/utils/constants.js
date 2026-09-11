@@ -5,10 +5,14 @@
 
 export const API_ROUTE_PREFIX = '/_plugins/_alerting';
 export const MONITOR_BASE_API = `${API_ROUTE_PREFIX}/monitors`;
+export const COMMENTS_BASE_API = `${API_ROUTE_PREFIX}/comments`;
+export const WORKFLOW_BASE_API = `${API_ROUTE_PREFIX}/workflows`;
+export const CROSS_CLUSTER_BASE_API = `${API_ROUTE_PREFIX}/remote`;
 export const AD_BASE_API = `/_plugins/_anomaly_detection/detectors`;
 export const DESTINATION_BASE_API = `${API_ROUTE_PREFIX}/destinations`;
 export const EMAIL_ACCOUNT_BASE_API = `${DESTINATION_BASE_API}/email_accounts`;
 export const EMAIL_GROUP_BASE_API = `${DESTINATION_BASE_API}/email_groups`;
+export const PPL_MONITOR_BASE_API = '/_plugins/_alerting/monitors';
 export const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
   Accept: 'application/json',
@@ -20,3 +24,8 @@ export const CLUSTER = {
   AD_ALERTING: 'alerting_ad',
   DATA: 'data',
 };
+
+export const FEATURE_FLAGS = Object.freeze({
+  PPL_MONITOR: 'pplAlertingEnabled',
+  SERVERLESS: 'serverlessEnabled',
+});

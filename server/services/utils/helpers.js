@@ -2,8 +2,8 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 import { get, map, mapKeys, mapValues, isPlainObject, snakeCase, camelCase } from 'lodash';
+import { schema } from '@osd/config-schema';
 
 export function mapKeysDeep(obj, fn) {
   if (Array.isArray(obj)) {
@@ -20,9 +20,40 @@ export const toSnake = (value, key) => snakeCase(key);
 export const toCamel = (value, key) => camelCase(key);
 
 export const isIndexNotFoundError = (err) => {
-  return (
-    err.statusCode === 404 &&
-    get(err, 'body.error.reason', '') ===
-      'Configured indices are not found: [.opendistro-alerting-config]'
+  if (err.statusCode === 404) {
+    const errorType = get(err, 'body.error.type', '');
+    const errorReason = get(err, 'body.error.reason', '');
+
+    return (
+      errorType === 'index_not_found_exception' ||
+      errorReason === 'Configured indices are not found: [.opendistro-alerting-config]' ||
+      errorReason.includes?.('no such index')
+    );
+  }
+  return false;
+};
+
+export function createValidateQuerySchema(dataSourceEnabled, fields = {}) {
+  // Extend the query schema with the specified fields
+  const schemaObj = { ...fields };
+
+  if (dataSourceEnabled) {
+    // Make dataSourceId optional to support APIs that can operate on the local cluster
+    schemaObj['dataSourceId'] = schema.maybe(schema.string());
+  }
+  return schema.object(schemaObj);
+}
+
+let dynamicConfig = undefined;
+export const getDynamicConfig = async (request, coreSetup) => {
+  if (dynamicConfig === undefined) {
+    const { dynamicConfigService } = coreSetup;
+    dynamicConfig = await dynamicConfigService.getStartService();
+  }
+  const client = dynamicConfig.getClient();
+  const dynamicConfigContextStore = dynamicConfig.createStoreFromRequest(request);
+  return await client.getConfig(
+    { pluginConfigPath: 'opensearch_alerting' },
+    { asyncLocalStorageContext: dynamicConfigContextStore }
   );
 };

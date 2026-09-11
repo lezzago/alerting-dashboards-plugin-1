@@ -10,16 +10,22 @@ module.exports = {
     '<rootDir>/test/setupTests.js',
     '<rootDir>/test/enzyme.js',
   ],
-  setupFilesAfterEnv: ['<rootDir>/test/setup.jest.js'],
+  setupFilesAfterEnv: [
+    'jest-location-mock',
+    '<rootDir>/test/setup.jest.js',
+    '<rootDir>../../src/dev/jest/setup/monaco_mock.js',
+  ],
   modulePaths: ['node_modules', `../../node_modules`],
   coverageDirectory: './coverage',
   moduleNameMapper: {
     '\\.(css|less|scss)$': '<rootDir>/test/mocks/styleMock.js',
     '^ui/(.*)': '<rootDir>/../../src/legacy/ui/public/$1/',
+    '^opensearch-dashboards/public$': '<rootDir>/../../src/core/public',
+    '^!!raw-loader!.*': '<rootDir>/test/mocks/rawLoaderMock.js',
   },
   snapshotSerializers: ['../../node_modules/enzyme-to-json/serializer'],
   coverageReporters: ['lcov', 'text', 'cobertura'],
-  testMatch: ['**/*.test.js'],
+  testMatch: ['**/*.test.{js,ts}'],
   collectCoverageFrom: [
     '**/*.js',
     '!**/node_modules/**',
@@ -41,4 +47,26 @@ module.exports = {
   clearMocks: true,
   testPathIgnorePatterns: ['<rootDir>/build/', '<rootDir>/node_modules/'],
   modulePathIgnorePatterns: ['alertingDashboards'],
+  testEnvironment: 'jest-environment-jsdom',
+  testEnvironmentOptions: {
+    // Set the default URL so window.location.origin is 'http://localhost:5601' rather than
+    // 'http://localhost', avoiding the need for tests to mock window.location.origin.
+    url: 'http://localhost:5601',
+  },
+  // Retain Jest 28 snapshot defaults; Jest 29 flipped escapeString and printBasicPrototype to false,
+  // which would invalidate existing snapshots. See https://jestjs.io/docs/upgrading-to-jest29
+  snapshotFormat: {
+    escapeString: true,
+    printBasicPrototype: true,
+  },
+  transform: {
+    '\\.[jt]sx?$': 'babel-jest',
+    '^.+\\.svg$': '<rootDir>/test/utils/mockTransform.js',
+    '^.+\\.html$': '<rootDir>/test/utils/mockTransform.js',
+  },
+  transformIgnorePatterns: [
+    // ignore all node_modules except packages that require babel transforms to handle export statements,
+    // including nested dependencies resolved from parent node_modules directories
+    String.raw`[/\\]node_modules[/\\](?!((?:@[^/\\]+[/\\])?[^/\\]+[/\\])*?(monaco-editor|react-monaco-editor|weak-lru-cache|ordered-binary|d3-color|axios|uuid|query-string|decode-uri-component|filter-obj|split-on-first)([/\\]|$))`,
+  ],
 };

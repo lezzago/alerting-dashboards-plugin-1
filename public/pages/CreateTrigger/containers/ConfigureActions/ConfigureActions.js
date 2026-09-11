@@ -5,18 +5,14 @@
 
 import React from 'react';
 import _ from 'lodash';
-import { EuiPanel, EuiText } from '@elastic/eui';
+import { EuiPanel, EuiText, EuiSpacer } from '@elastic/eui';
 import Action from '../../components/Action';
 import ActionEmptyPrompt from '../../components/ActionEmptyPrompt';
 import AddActionButton from '../../components/AddActionButton';
-import {
-  CHANNEL_TYPES,
-  DEFAULT_MESSAGE_SOURCE,
-  FORMIK_INITIAL_ACTION_VALUES,
-} from '../../utils/constants';
 import { getAllowList } from '../../../Destinations/utils/helpers';
 import {
   MAX_QUERY_RESULT_SIZE,
+  MAX_CHANNELS_RESULT_SIZE,
   MONITOR_TYPE,
   OS_NOTIFICATION_PLUGIN,
 } from '../../../../utils/constants';
@@ -24,13 +20,31 @@ import { backendErrorNotification } from '../../../../utils/helpers';
 import { TRIGGER_TYPE } from '../CreateTrigger/utils/constants';
 import { formikToTrigger } from '../CreateTrigger/utils/formikToTrigger';
 import { getChannelOptions, toChannelType } from '../../utils/helper';
+import { getInitialActionValues } from '../../components/AddActionButton/utils';
+import { getDataSourceId } from '../../../utils/helpers';
+import { getDataSourceMetadata, isServerlessDataSource } from '../../../../services';
 
-const createActionContext = (context, action) => ({
-  ctx: {
-    ...context,
-    action,
-  },
-});
+const createActionContext = (context, action) => {
+  let trigger = context.trigger;
+  const triggerType = Object.keys(trigger)[0];
+  if (
+    Object.keys(trigger).length === 1 &&
+    !_.isEmpty(triggerType) &&
+    Object.values(TRIGGER_TYPE).includes(triggerType)
+  ) {
+    // If the trigger values is wrapped in the trigger type, unwrap it
+    trigger = trigger[triggerType];
+  } else {
+    console.warn(`Unknown trigger type "${triggerType}".`, context);
+  }
+  return {
+    ctx: {
+      ...context,
+      trigger: { ...trigger },
+      action,
+    },
+  };
+};
 
 export const checkForError = (response, error) => {
   for (const trigger_name in response.resp.trigger_results) {
@@ -50,6 +64,11 @@ export const checkForError = (response, error) => {
 class ConfigureActions extends React.Component {
   constructor(props) {
     super(props);
+    const { values, fieldPath } = props;
+    const firstActionId = _.get(values, `${fieldPath}actions[0].id`, '');
+    const startActionIndex = 0;
+    const accordionsOpen = firstActionId ? { [startActionIndex]: true } : {};
+
     this.state = {
       destinations: [],
       flattenedDestinations: [],
@@ -57,6 +76,10 @@ class ConfigureActions extends React.Component {
       loadingDestinations: true,
       actionDeleted: false,
       hasNotificationPlugin: false,
+      currentSubmitCount: 0,
+      accordionsOpen,
+      isInitialLoading: true,
+      isAoss: false,
     };
   }
 
@@ -64,10 +87,11 @@ class ConfigureActions extends React.Component {
     const { httpClient, plugins } = this.props;
 
     const allowList = await getAllowList(httpClient);
-    this.setState({ allowList });
+    const isAoss = isServerlessDataSource();
+    this.setState({ allowList, isAoss });
 
     // Check if notification plugin is present
-    if (plugins.indexOf(OS_NOTIFICATION_PLUGIN) !== -1) {
+    if (plugins.indexOf(OS_NOTIFICATION_PLUGIN) !== -1 || isAoss) {
       this.setState({ hasNotificationPlugin: true });
     }
 
@@ -75,22 +99,120 @@ class ConfigureActions extends React.Component {
   }
 
   componentDidUpdate(prevProps) {
-    if (this.props.plugins !== prevProps.plugins) {
-      if (this.props.plugins.indexOf(OS_NOTIFICATION_PLUGIN) !== -1) {
-        this.setState({ hasNotificationPlugin: true });
-      }
+    const isAoss = isServerlessDataSource();
+    const isAossChanged = isAoss !== this.state.isAoss;
+    if (isAossChanged) {
+      this.setState({ isAoss });
+    }
+
+    if (this.props.plugins !== prevProps.plugins || isAossChanged) {
+      const hasNotificationPlugin =
+        this.props.plugins.indexOf(OS_NOTIFICATION_PLUGIN) !== -1 || isAoss;
+      this.setState({ hasNotificationPlugin });
 
       this.loadDestinations();
     }
   }
 
+  onAccordionToggle = (key) => {
+    const accordionsOpen = { ...this.state.accordionsOpen };
+    accordionsOpen[key] = !accordionsOpen[key];
+    this.setState({ accordionsOpen, currentSubmitCount: this.props.submitCount });
+  };
+
+  /**
+   * Returns all channels in consecutive requests until all channels are returned
+   * @returns {Promise<*[]>}
+   */
+  getChannels = async () => {
+    const { hasNotificationPlugin, isAoss } = this.state;
+
+    let channels = [];
+    let index = 0;
+    const DEFAULT_CHANNEL_TYPES = ['slack', 'email', 'chime', 'microsoft_teams', 'webhook', 'sns'];
+    const getChannels = async () => {
+      let configTypes = DEFAULT_CHANNEL_TYPES;
+      if (!isAoss) {
+        const serverFeatures = await this.props.notificationService.getServerFeatures();
+        configTypes = Object.keys(serverFeatures.availableChannels);
+      }
+      const getChannelsQuery = {
+        from_index: index,
+        max_items: MAX_CHANNELS_RESULT_SIZE,
+        config_type: configTypes,
+        sort_field: 'name',
+        sort_order: 'asc',
+      };
+
+      const channelsResponse = await this.props.notificationService.getChannels(getChannelsQuery);
+
+      // TODO: Might still need to filter the allowed channel types here if the backend doesn't
+      //   since Notifications uses its own setting
+      channels = channels.concat(
+        channelsResponse.items.map((channel) => ({
+          label: `[Channel] ${channel.name}`,
+          value: channel.config_id,
+          type: channel.config_type,
+          description: channel.description,
+        }))
+      );
+
+      if (channelsResponse.total && channels.length < channelsResponse.total) {
+        index += MAX_CHANNELS_RESULT_SIZE;
+        await getChannels();
+      }
+    };
+
+    if (hasNotificationPlugin) {
+      await getChannels();
+    }
+
+    return channels;
+  };
+
   loadDestinations = async (searchText = '') => {
-    const { httpClient, values, arrayHelpers, notifications, fieldPath } = this.props;
-    const { allowList, actionDeleted, hasNotificationPlugin } = this.state;
+    const { httpClient, values, arrayHelpers, notifications, fieldPath, flyoutMode } = this.props;
+    const { allowList, actionDeleted, isAoss } = this.state;
+
+    // Destinations-related API do not exist in AOSS. Only load notification channels.
+    if (isAoss) {
+      this.setState({ loadingDestinations: true });
+      try {
+        const channels = await this.getChannels();
+        const channelOptionsByType = getChannelOptions(channels);
+        this.setState({
+          destinations: channelOptionsByType,
+          flattenedDestinations: channels,
+          loadingDestinations: false,
+        });
+
+        const monitorType = _.get(
+          arrayHelpers,
+          'form.values.monitor_type',
+          MONITOR_TYPE.QUERY_LEVEL
+        );
+        const actions = _.get(values, `${fieldPath}actions`, []);
+        const initialActionValues = getInitialActionValues({ monitorType, flyoutMode, actions });
+
+        if (channels.length > 0 && !_.get(values, `${fieldPath}actions`) && !actionDeleted) {
+          arrayHelpers.insert(0, initialActionValues);
+        }
+      } catch (err) {
+        console.error(err);
+        this.setState({ destinations: [], flattenedDestinations: [], loadingDestinations: false });
+      }
+      this.setState({ isInitialLoading: false });
+      return;
+    }
+
     this.setState({ loadingDestinations: true });
     try {
       const response = await httpClient.get('../api/alerting/destinations', {
-        query: { search: searchText, size: MAX_QUERY_RESULT_SIZE },
+        query: {
+          search: searchText,
+          size: MAX_QUERY_RESULT_SIZE,
+          dataSourceId: getDataSourceId(),
+        },
       });
       let destinations = [];
       if (response.ok) {
@@ -103,34 +225,14 @@ class ConfigureActions extends React.Component {
             type: toChannelType(destination.type),
             description: '',
           }));
-      } else {
+      } else if (response.err) {
         backendErrorNotification(notifications, 'load', 'destinations', response.err);
       }
 
-      let channels = [];
-      if (hasNotificationPlugin) {
-        // Fetch Notification Channels
-        const getChannelsQuery = {
-          from_index: 0,
-          max_items: MAX_QUERY_RESULT_SIZE,
-          query: searchText,
-          config_type: CHANNEL_TYPES,
-          sort_field: 'name',
-          sort_order: 'asc',
-        };
-        const channelsResponse = await this.props.notificationService.getChannels(getChannelsQuery);
-        // TODO: Might still need to filter the allowed channel types here if the backend doesn't
-        //   since Notifications uses its own setting
-        channels = channelsResponse.items.map((channel) => ({
-          label: `[Channel] ${channel.name}`,
-          value: channel.config_id,
-          type: channel.config_type,
-          description: channel.description,
-        }));
-      }
+      let channels = await this.getChannels();
 
       const destinationsAndChannels = destinations.concat(channels);
-      const channelOptionsByType = getChannelOptions(destinationsAndChannels, CHANNEL_TYPES);
+      const channelOptionsByType = getChannelOptions(destinationsAndChannels);
       this.setState({
         destinations: channelOptionsByType,
         flattenedDestinations: destinationsAndChannels,
@@ -138,23 +240,8 @@ class ConfigureActions extends React.Component {
       });
 
       const monitorType = _.get(arrayHelpers, 'form.values.monitor_type', MONITOR_TYPE.QUERY_LEVEL);
-      const initialActionValues = _.cloneDeep(FORMIK_INITIAL_ACTION_VALUES);
-      switch (monitorType) {
-        case MONITOR_TYPE.BUCKET_LEVEL:
-          _.set(
-            initialActionValues,
-            'message_template.source',
-            DEFAULT_MESSAGE_SOURCE.BUCKET_LEVEL_MONITOR
-          );
-          break;
-        default:
-          _.set(
-            initialActionValues,
-            'message_template.source',
-            DEFAULT_MESSAGE_SOURCE.QUERY_LEVEL_MONITOR
-          );
-          break;
-      }
+      const actions = _.get(values, `${fieldPath}actions`, []);
+      const initialActionValues = getInitialActionValues({ monitorType, flyoutMode, actions });
 
       // If actions is not defined  If user choose to delete actions, it will not override customer's preferences.
       if (
@@ -172,6 +259,8 @@ class ConfigureActions extends React.Component {
         loadingDestinations: false,
       });
     }
+
+    this.setState({ isInitialLoading: false });
   };
 
   sendTestMessage = async (index) => {
@@ -225,10 +314,11 @@ class ConfigureActions extends React.Component {
     const testMonitor = { ...monitor, triggers: [{ ...testTrigger }] };
 
     try {
-      const response = await httpClient.post('../api/alerting/monitors/_execute', {
-        query: { dryrun: false },
+      const response = await httpClient.post('/api/alerting/monitors/_execute', {
+        query: { dryrun: false, dataSourceId: getDataSourceId() },
         body: JSON.stringify(testMonitor),
       });
+
       let error = null;
       if (response.ok) {
         error = checkForError(response, error);
@@ -251,71 +341,127 @@ class ConfigureActions extends React.Component {
   };
 
   renderActions = (arrayHelpers) => {
-    const { context, setFlyout, values, fieldPath, httpClient, plugins } = this.props;
-    const { destinations, flattenedDestinations } = this.state;
+    const { context, setFlyout, values, fieldPath, flyoutMode, submitCount, errors } = this.props;
+    const {
+      destinations,
+      flattenedDestinations,
+      accordionsOpen,
+      isInitialLoading,
+      currentSubmitCount,
+      hasNotificationPlugin,
+    } = this.state;
     const hasDestinations = !_.isEmpty(destinations);
     const hasActions = !_.isEmpty(_.get(values, `${fieldPath}actions`));
     const shouldRenderActions = hasActions || (hasDestinations && hasActions);
-    const hasNotificationPlugin = plugins.indexOf(OS_NOTIFICATION_PLUGIN) !== -1;
+    const numActions = _.get(values, `${fieldPath}actions`, []).length;
 
     return shouldRenderActions ? (
-      _.get(values, `${fieldPath}actions`).map((action, index) => (
-        <Action
-          key={index}
-          action={action}
-          arrayHelpers={arrayHelpers}
-          context={createActionContext(context, action)}
-          destinations={destinations}
-          flattenedDestinations={flattenedDestinations}
-          index={index}
-          onDelete={() => {
-            this.setState({ actionDeleted: true });
-            arrayHelpers.remove(index);
-          }}
-          sendTestMessage={this.sendTestMessage}
-          setFlyout={setFlyout}
-          httpClient={httpClient}
-          fieldPath={fieldPath}
-          values={values}
-          hasNotificationPlugin={hasNotificationPlugin}
-        />
-      ))
+      _.get(values, `${fieldPath}actions`).map((action, index) => {
+        const key = action.id;
+        if (flyoutMode && submitCount > currentSubmitCount) {
+          accordionsOpen[index] =
+            accordionsOpen?.[index] || 'actions' in errors.triggerDefinitions[index];
+        }
+
+        return (
+          <Action
+            key={key}
+            action={action}
+            arrayHelpers={arrayHelpers}
+            context={createActionContext(context, action)}
+            destinations={destinations}
+            flattenedDestinations={flattenedDestinations}
+            index={index}
+            onDelete={() => {
+              this.setState({ actionDeleted: true });
+              const actionsList = _.get(values, `${fieldPath}actions`, []);
+              arrayHelpers.remove(index);
+              const form = arrayHelpers.form;
+              const updatedErrors = _.cloneDeep(form.errors);
+              _.unset(updatedErrors, `${fieldPath}actions[${index}]`);
+              if ((actionsList.length || 0) <= 1) {
+                _.unset(updatedErrors, `${fieldPath}actions`);
+              }
+              form.setErrors(updatedErrors);
+
+              const updatedTouched = _.cloneDeep(form.touched);
+              _.unset(updatedTouched, `${fieldPath}actions[${index}]`);
+              if ((actionsList.length || 0) <= 1) {
+                _.unset(updatedTouched, `${fieldPath}actions`);
+              }
+              form.setTouched(updatedTouched, false);
+            }}
+            sendTestMessage={this.sendTestMessage}
+            setFlyout={setFlyout}
+            fieldPath={fieldPath}
+            values={values}
+            hasNotificationPlugin={hasNotificationPlugin}
+            loadDestinations={this.loadDestinations}
+            flyoutMode={flyoutMode}
+            accordionProps={{
+              isOpen: accordionsOpen[index],
+              onToggle: () => this.onAccordionToggle(index),
+            }}
+            isInitialLoading={isInitialLoading}
+          />
+        );
+      })
     ) : (
       <ActionEmptyPrompt
         arrayHelpers={arrayHelpers}
         hasDestinations={hasDestinations}
-        httpClient={httpClient}
         hasNotificationPlugin={hasNotificationPlugin}
+        flyoutMode={flyoutMode}
+        onPostAdd={(initialValues) => this.onAccordionToggle(initialValues.id)}
+        numActions={numActions}
       />
     );
   };
 
   render() {
     const { loadingDestinations } = this.state;
-    const { arrayHelpers, values, fieldPath } = this.props;
-    const numOfActions = _.get(values, `${fieldPath}actions`, []).length;
-    const displayAddActionButton = numOfActions > 0;
+    const { arrayHelpers, values, fieldPath, flyoutMode } = this.props;
+    const numActions = _.get(values, `${fieldPath}actions`, []).length;
+    const displayAddActionButton = numActions > 0;
     //TODO:: Handle loading Destinations inside the Action which will be more intuitive for customers.
     return (
-      <div style={{ paddingLeft: '10px', paddingRight: '10px' }}>
-        <EuiText>
-          <h4>{`Actions (${numOfActions})`}</h4>
-        </EuiText>
-        <EuiText color={'subdued'} size={'xs'} style={{ paddingBottom: '5px' }}>
-          Define actions when trigger conditions are met.
-        </EuiText>
-        <EuiPanel style={{ backgroundColor: '#F7F7F7', padding: '20px' }}>
-          {loadingDestinations ? (
+      <div style={flyoutMode ? {} : { paddingLeft: '10px', paddingRight: '10px' }}>
+        {!flyoutMode && (
+          <>
+            <EuiText>
+              <h4>{`Actions (${numActions})`}</h4>
+            </EuiText>
+            <EuiText color={'subdued'} size={'xs'} style={{ paddingBottom: '5px' }}>
+              Define actions when trigger conditions are met.
+            </EuiText>
+          </>
+        )}
+        <EuiPanel
+          style={flyoutMode ? {} : { padding: '20px' }}
+          paddingSize="none"
+          hasShadow={!flyoutMode}
+          hasBorder={!flyoutMode}
+        >
+          {!flyoutMode && loadingDestinations && numActions < 1 ? (
             <div style={{ display: 'flex', justifyContent: 'center' }}>Loading Destinations...</div>
           ) : (
-            this.renderActions(arrayHelpers)
+            <>
+              {this.renderActions(arrayHelpers)}
+              {flyoutMode && <EuiSpacer size="m" />}
+            </>
           )}
-
-          {displayAddActionButton ? (
-            <div style={{ paddingBottom: '5px', paddingTop: '20px' }}>
-              <AddActionButton arrayHelpers={arrayHelpers} numOfActions={numOfActions} />
+          {displayAddActionButton && (
+            <div style={flyoutMode ? {} : { paddingBottom: '5px', paddingTop: '20px' }}>
+              <AddActionButton
+                arrayHelpers={arrayHelpers}
+                values={values}
+                fieldPath={fieldPath}
+                numActions={numActions}
+                flyoutMode={flyoutMode}
+                onPostAdd={(initialValues) => this.onAccordionToggle(initialValues.id)}
+              />
             </div>
-          ) : null}
+          )}
         </EuiPanel>
       </div>
     );

@@ -9,6 +9,9 @@ import {
   DESTINATION_BASE_API,
   EMAIL_ACCOUNT_BASE_API,
   EMAIL_GROUP_BASE_API,
+  WORKFLOW_BASE_API,
+  CROSS_CLUSTER_BASE_API,
+  COMMENTS_BASE_API,
 } from '../../services/utils/constants';
 
 export default function alertingPlugin(Client, config, components) {
@@ -22,6 +25,19 @@ export default function alertingPlugin(Client, config, components) {
       fmt: `${API_ROUTE_PREFIX}/findings/_search`,
     },
     needBody: true,
+    method: 'GET',
+  });
+
+  alerting.getWorkflow = ca({
+    url: {
+      fmt: `${API_ROUTE_PREFIX}/workflows/<%=monitorId%>`,
+      req: {
+        monitorId: {
+          type: 'string',
+          required: true,
+        },
+      },
+    },
     method: 'GET',
   });
 
@@ -46,6 +62,14 @@ export default function alertingPlugin(Client, config, components) {
     method: 'POST',
   });
 
+  alerting.createWorkflow = ca({
+    url: {
+      fmt: `${API_ROUTE_PREFIX}/workflows?refresh=wait_for`,
+    },
+    needBody: true,
+    method: 'POST',
+  });
+
   alerting.deleteMonitor = ca({
     url: {
       fmt: `${MONITOR_BASE_API}/<%=monitorId%>`,
@@ -59,10 +83,38 @@ export default function alertingPlugin(Client, config, components) {
     method: 'DELETE',
   });
 
+  alerting.deleteWorkflow = ca({
+    url: {
+      fmt: `${WORKFLOW_BASE_API}/<%=workflowId%>`,
+      req: {
+        workflowId: {
+          type: 'string',
+          required: true,
+        },
+      },
+    },
+    method: 'DELETE',
+  });
+
   // TODO DRAFT: May need to add 'refresh' assignment here again.
   alerting.updateMonitor = ca({
     url: {
       fmt: `${MONITOR_BASE_API}/<%=monitorId%>`,
+      req: {
+        monitorId: {
+          type: 'string',
+          required: true,
+        },
+      },
+    },
+    needBody: true,
+    method: 'PUT',
+  });
+
+  // TODO DRAFT: May need to add 'refresh' assignment here again.
+  alerting.updateWorkflow = ca({
+    url: {
+      fmt: `${API_ROUTE_PREFIX}/workflows/<%=monitorId%>`,
       req: {
         monitorId: {
           type: 'string',
@@ -87,6 +139,20 @@ export default function alertingPlugin(Client, config, components) {
       fmt: `${MONITOR_BASE_API}/<%=monitorId%>/_acknowledge/alerts`,
       req: {
         monitorId: {
+          type: 'string',
+          required: true,
+        },
+      },
+    },
+    needBody: true,
+    method: 'POST',
+  });
+
+  alerting.acknowledgeChainedAlerts = ca({
+    url: {
+      fmt: `${WORKFLOW_BASE_API}/<%=workflowId%>/_acknowledge/alerts`,
+      req: {
+        workflowId: {
           type: 'string',
           required: true,
         },
@@ -305,6 +371,124 @@ export default function alertingPlugin(Client, config, components) {
         },
       },
     },
+    method: 'DELETE',
+  });
+
+  alerting.getWorkflowAlerts = ca({
+    url: {
+      fmt: `${WORKFLOW_BASE_API}/alerts?workflowIds=<%=workflowIds%>&getAssociatedAlerts=<%=getAssociatedAlerts%>&sortString=<%=sortString%>&sortOrder=<%=sortOrder%>&startIndex=<%=startIndex%>&size=<%=size%>&severityLevel=<%=severityLevel%>&alertState=<%=alertState%>&searchString=<%=searchString%>&alertIds=<%=alertIds%>`,
+      req: {
+        workflowIds: {
+          type: 'string',
+          required: true,
+        },
+        alertIds: {
+          type: 'string',
+          required: true,
+        },
+        getAssociatedAlerts: {
+          type: 'boolean',
+          required: true,
+        },
+        sortString: {
+          type: 'string',
+          required: true,
+        },
+        sortOrder: {
+          type: 'string',
+          required: true,
+        },
+        startIndex: {
+          type: 'number',
+          required: true,
+        },
+        size: {
+          type: 'number',
+          required: true,
+        },
+        severityLevel: {
+          type: 'string',
+          required: false,
+        },
+        alertState: {
+          type: 'string',
+          required: false,
+        },
+        searchString: {
+          type: 'string',
+          required: false,
+        },
+      },
+    },
+    method: 'GET',
+  });
+
+  alerting.getRemoteIndexes = ca({
+    url: {
+      fmt: `${CROSS_CLUSTER_BASE_API}/indexes?indexes=<%=indexes%>&include_mappings=<%=include_mappings%>`,
+      req: {
+        indexes: {
+          type: 'string',
+          required: true,
+        },
+        include_mappings: {
+          type: 'boolean',
+          required: false,
+        },
+      },
+    },
+    needBody: true,
+    method: 'GET',
+  });
+
+  // Comments
+  alerting.createComment = ca({
+    url: {
+      fmt: `${COMMENTS_BASE_API}/<%=alertId%>`,
+      req: {
+        alertId: {
+          type: 'string',
+          required: true,
+        },
+      },
+    },
+    needBody: true,
+    method: 'POST',
+  });
+
+  alerting.updateComment = ca({
+    url: {
+      fmt: `${COMMENTS_BASE_API}/<%=commentId%>`,
+      req: {
+        commentId: {
+          type: 'string',
+          required: true,
+        },
+      },
+    },
+    needBody: true,
+    method: 'PUT',
+  });
+
+  alerting.searchComments = ca({
+    url: {
+      fmt: `${COMMENTS_BASE_API}/_search`,
+    },
+    needBody: true,
+    method: 'POST',
+  });
+
+  alerting.deleteComment = ca({
+    url: {
+      fmt: `${COMMENTS_BASE_API}/<%=commentId%>`,
+      req: {
+        commentId: {
+          type: 'string',
+          required: true,
+        },
+      },
+    },
+    needBody: false,
     method: 'DELETE',
   });
 }

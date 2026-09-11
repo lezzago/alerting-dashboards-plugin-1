@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`Triggers renders 1`] = `
 <ContentPanel
@@ -18,7 +18,7 @@ exports[`Triggers renders 1`] = `
           "name": "Name",
           "sortable": true,
           "truncateText": true,
-          "width": "25%",
+          "width": "15%",
         },
         Object {
           "field": "actions",
@@ -26,24 +26,32 @@ exports[`Triggers renders 1`] = `
           "render": [Function],
           "sortable": true,
           "truncateText": false,
-          "width": "25%",
+          "width": "15%",
         },
         Object {
           "field": "severity",
           "name": "Severity",
           "sortable": true,
           "truncateText": false,
-          "width": "50%",
+          "width": "10%",
         },
       ]
     }
     itemId="id"
     items={
       Array [
-        undefined,
+        Object {
+          "actions": Array [
+            Object {
+              "name": "Random Action",
+            },
+          ],
+          "name": "Random Trigger",
+          "severity": 1,
+        },
       ]
     }
-    key="0"
+    key="table-1700000000000-0.123456789"
     noItemsMessage="There are no triggers."
     onTableChange={[Function]}
     responsive={true}

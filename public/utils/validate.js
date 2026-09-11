@@ -7,11 +7,14 @@ import _ from 'lodash';
 import { INDEX, MAX_THROTTLE_VALUE, WRONG_THROTTLE_WARNING } from '../../utils/constants';
 import { MONITOR_TYPE } from './constants';
 import { TRIGGER_TYPE } from '../pages/CreateTrigger/containers/CreateTrigger/utils/constants';
+import { getDataSourceQueryObj } from '../pages/utils/helpers';
 
 // TODO: Use a validation framework to clean all of this up or create own.
 
 export const isInvalid = (name, form) =>
   !!_.get(form.touched, name, false) && !!_.get(form.errors, name, false);
+
+export const isInvalidWithoutTouch = (name, form) => !!_.get(form.errors, name, false);
 
 export const hasError = (name, form) => _.get(form.errors, name);
 
@@ -35,6 +38,10 @@ export const validateActionName = (monitor, trigger) => (value) => {
       actions = _.get(trigger, `${TRIGGER_TYPE.DOC_LEVEL}.actions`, []);
       break;
   }
+  if (!actions && trigger?.actions) {
+    actions = trigger.actions;
+  }
+  actions = Array.isArray(actions) ? actions : [];
   const matches = actions.filter((action) => action.name === value);
   if (matches.length > 1) return 'Action name is already used.';
 };
@@ -59,25 +66,35 @@ export const required = (value) => {
   if (!value) return 'Required.';
 };
 
-export const validateIllegalCharacters = (illegalCharacters = ILLEGAL_CHARACTERS) => (value) => {
-  if (_.isEmpty(value)) return required(value);
-
-  const illegalCharactersString = illegalCharacters.join(' ');
-  let errorText = `Contains invalid characters. Cannot contain: ${illegalCharactersString}`;
-
-  if (_.includes(illegalCharacters, ' ')) {
-    errorText =
-      illegalCharacters.length === 1
-        ? 'Cannot contain spaces.'
-        : `Contains invalid characters or spaces. Cannot contain: ${illegalCharactersString}`;
-  }
-
-  let includesIllegalCharacter = false;
-  illegalCharacters.forEach((character) => {
-    if (_.includes(value, character)) includesIllegalCharacter = true;
-  });
-  if (includesIllegalCharacter) return errorText;
+export const requiredValidation = (text) => (value) => {
+  if (!value || (Array.isArray(value) && value.length === 0)) return text;
 };
+
+export const requiredNumber = (value) => {
+  if (isNaN(parseFloat(value))) return 'Requires numerical value.';
+};
+
+export const validateIllegalCharacters =
+  (illegalCharacters = ILLEGAL_CHARACTERS) =>
+  (value) => {
+    if (_.isEmpty(value)) return required(value);
+
+    const illegalCharactersString = illegalCharacters.join(' ');
+    let errorText = `Contains invalid characters. Cannot contain: ${illegalCharactersString}`;
+
+    if (_.includes(illegalCharacters, ' ')) {
+      errorText =
+        illegalCharacters.length === 1
+          ? 'Cannot contain spaces.'
+          : `Contains invalid characters or spaces. Cannot contain: ${illegalCharactersString}`;
+    }
+
+    let includesIllegalCharacter = false;
+    illegalCharacters.forEach((character) => {
+      if (_.includes(value, character)) includesIllegalCharacter = true;
+    });
+    if (includesIllegalCharacter) return errorText;
+  };
 
 export const validateRequiredNumber = (value) => {
   if (value === undefined || typeof value === 'string') return 'Provide a value.';
@@ -88,16 +105,19 @@ export const isInvalidApiPath = (name, form) => {
   return _.get(form.touched, name, false) && _.isEmpty(path);
 };
 
-export const validateMonitorName = (httpClient, monitorToEdit) => async (value) => {
+export const validateMonitorName = (httpClient, monitorToEdit, isFullText) => async (value) => {
   try {
-    if (!value) return 'Required.';
+    const dataSourceQuery = getDataSourceQueryObj();
+    if (!value) return isFullText ? 'Monitor name is required.' : 'Required.';
     const options = {
       index: INDEX.SCHEDULED_JOBS,
       query: { query: { term: { 'monitor.name.keyword': value } } },
     };
     const response = await httpClient.post('../api/alerting/monitors/_search', {
       body: JSON.stringify(options),
+      query: dataSourceQuery?.query,
     });
+
     if (_.get(response, 'resp.hits.total.value', 0)) {
       if (!monitorToEdit) return 'Monitor name is already used.';
       if (monitorToEdit && monitorToEdit.name !== value) {
@@ -142,7 +162,7 @@ export const validateIndex = (options) => {
   if (!options.length) return 'Must specify an index.';
 
   const illegalCharacters = ILLEGAL_CHARACTERS.join(' ');
-  const pattern = options.map(({ label }) => label).join('');
+  const pattern = options.map(({ value, label }) => value || label).join('');
   if (!isIndexPatternQueryValid(pattern, ILLEGAL_CHARACTERS)) {
     return `One of your inputs contains invalid characters or spaces. Please omit: ${illegalCharacters}`;
   }

@@ -1,0 +1,12 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`FindingFlyout renders 1`] = `
+<div>
+  <button
+    class="euiLink euiLink--primary"
+    type="button"
+  >
+    No document ID
+  </button>
+</div>
+`;

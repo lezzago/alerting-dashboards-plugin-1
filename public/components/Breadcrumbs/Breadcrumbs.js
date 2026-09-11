@@ -3,77 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { Component } from 'react';
-import PropTypes from 'prop-types';
 import _ from 'lodash';
 import queryString from 'query-string';
-import { EuiBreadcrumbs } from '@elastic/eui';
 import {
   APP_PATH,
   DESTINATION_ACTIONS,
   MONITOR_ACTIONS,
   TRIGGER_ACTIONS,
 } from '../../utils/constants';
+import { getDataSourceQueryObj } from '../../pages/utils/helpers';
 
-const propTypes = {
-  history: PropTypes.object.isRequired,
-  httpClient: PropTypes.object.isRequired,
-  location: PropTypes.object.isRequired,
-  title: PropTypes.string.isRequired,
-};
+export async function getBreadcrumbs(httpClient, history, location) {
+  const { state: routeState } = location;
+  const rawBreadcrumbs = await getBreadcrumbsData(window.location.hash, routeState, httpClient);
 
-export default class Breadcrumbs extends Component {
-  constructor(props) {
-    super(props);
-
-    this.state = { breadcrumbs: [] };
-
-    this.getBreadcrumbs = this.getBreadcrumbs.bind(this);
-  }
-
-  componentDidMount() {
-    this.getBreadcrumbs();
-  }
-
-  componentDidUpdate(prevProps) {
-    const {
-      location: { pathname: prevPathname, search: prevSearch },
-    } = prevProps;
-    const {
-      location: { pathname, search },
-    } = this.props;
-    if (prevPathname + prevSearch !== pathname + search) {
-      this.getBreadcrumbs();
-    }
-  }
-
-  async getBreadcrumbs() {
-    const {
-      httpClient,
-      history,
-      location: { state: routeState },
-    } = this.props;
-    const rawBreadcrumbs = await getBreadcrumbs(window.location.hash, routeState, httpClient);
-    const breadcrumbs = rawBreadcrumbs.map((breadcrumb) =>
-      createEuiBreadcrumb(breadcrumb, history)
-    );
-    this.setState({ breadcrumbs });
-  }
-
-  render() {
-    const { breadcrumbs } = this.state;
-    return (
-      <EuiBreadcrumbs
-        breadcrumbs={breadcrumbs}
-        responsive={false}
-        truncate={true}
-        style={{ padding: '0px 15px' }}
-      />
-    );
-  }
+  return rawBreadcrumbs.map((breadcrumb) => createEuiBreadcrumb(breadcrumb, history));
 }
-
-Breadcrumbs.propTypes = propTypes;
 
 export function createEuiBreadcrumb(breadcrumb, history) {
   const { text, href } = breadcrumb;
@@ -87,7 +32,7 @@ export function createEuiBreadcrumb(breadcrumb, history) {
   };
 }
 
-export async function getBreadcrumbs(hash, routeState, httpClient) {
+export async function getBreadcrumbsData(hash, routeState, httpClient) {
   const routes = parseLocationHash(hash);
   const asyncBreadcrumbs = await Promise.all(
     routes.map((route) => getBreadcrumb(route, routeState, httpClient))
@@ -106,7 +51,7 @@ export async function getBreadcrumb(route, routeState, httpClient) {
   // This condition is true for any auto generated 20 character long,
   // URL-safe, base64-encoded document ID by opensearch
   if (RegExp(/^[0-9a-z_-]{20}$/i).test(base)) {
-    const { action } = queryString.parse(`?${queryParams}`);
+    const { action, type, monitorType } = queryString.parse(`?${queryParams}`);
     switch (action) {
       case DESTINATION_ACTIONS.UPDATE_DESTINATION:
         const destinationName = _.get(routeState, 'destinationToEdit.name', base);
@@ -119,16 +64,28 @@ export async function getBreadcrumb(route, routeState, httpClient) {
         // TODO::Everything else is considered as monitor, we should break this.
         let monitorName = base;
         try {
-          const response = await httpClient.get(`../api/alerting/monitors/${base}`);
-          if (response.ok) {
-            monitorName = response.resp.name;
+          const searchPool =
+            type === 'workflow' || monitorType === 'composite' ? 'workflows' : 'monitors';
+
+          // Construct the full URL with the query parameters
+          const dataSourceQueryObj = getDataSourceQueryObj();
+
+          const monitorBreadcrumbData = await fetchMonitorName(
+            base,
+            searchPool,
+            dataSourceQueryObj,
+            httpClient
+          );
+
+          if (monitorBreadcrumbData?.name) {
+            monitorName = monitorBreadcrumbData.name;
           }
         } catch (err) {
           console.error(err);
         }
         const breadcrumbs = [{ text: monitorName, href: `/monitors/${base}` }];
-        if (action === MONITOR_ACTIONS.UPDATE_MONITOR)
-          breadcrumbs.push({ text: 'Update monitor', href: '/' });
+        if (action === MONITOR_ACTIONS.EDIT_MONITOR)
+          breadcrumbs.push({ text: 'Edit monitor', href: '/' });
         if (action === TRIGGER_ACTIONS.CREATE_TRIGGER)
           breadcrumbs.push({ text: 'Create trigger', href: '/' });
         if (action === TRIGGER_ACTIONS.UPDATE_TRIGGER)
@@ -152,3 +109,16 @@ export async function getBreadcrumb(route, routeState, httpClient) {
     ],
   }[base];
 }
+
+const fetchMonitorName = async (id, legacyResource, dataSourceQueryObj, httpClient) => {
+  const legacyResp = await httpClient.get(
+    `../api/alerting/${legacyResource}/${encodeURIComponent(id)}`,
+    dataSourceQueryObj
+  );
+
+  if (legacyResp?.ok) {
+    return { name: legacyResp?.resp?.name ?? id };
+  }
+
+  return null;
+};

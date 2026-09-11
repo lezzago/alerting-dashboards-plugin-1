@@ -14,6 +14,7 @@ import {
   ACTIONABLE_ALERTS_OPTIONS_LABELS,
   NOTIFY_OPTIONS_VALUES,
 } from '../../../components/Action/actions/Message';
+import { triggerToFormikPpl } from './triggerToFormikPpl';
 
 export function triggerToFormik(trigger, monitor) {
   return _.isArray(trigger)
@@ -35,6 +36,10 @@ export function triggerDefinitionToFormik(trigger, monitor) {
       return bucketLevelTriggerToFormik(trigger, monitor);
     case MONITOR_TYPE.DOC_LEVEL:
       return documentLevelTriggerToFormik(trigger, monitor);
+    case MONITOR_TYPE.COMPOSITE_LEVEL:
+      return compositeTriggerToFormik(trigger, monitor);
+    case MONITOR_TYPE.PPL:
+      return triggerToFormikPpl(trigger);
     default:
       return queryLevelTriggerToFormik(trigger, monitor);
   }
@@ -126,7 +131,7 @@ export function bucketLevelTriggerToFormik(trigger, monitor) {
 
   const bucketSelector = JSON.stringify(condition, null, 4);
   const triggerConditions = getBucketLevelTriggerConditions(condition);
-  const where = getWhereExpression(composite_agg_filter);
+  const whereFilters = getWhereFilters(composite_agg_filter);
 
   const triggersUiMetadata = _.get(monitor, 'ui_metadata.triggers', {});
   const thresholdEnum = _.get(
@@ -175,13 +180,13 @@ export function bucketLevelTriggerToFormik(trigger, monitor) {
     severity,
     script,
     bucketSelector,
-    actions: getBucketLevelTriggerActions(actions),
+    actions: getExecutionPolicyActions(actions),
     triggerConditions,
     minTimeBetweenExecutions,
     rollingWindowSize,
     thresholdEnum,
     thresholdValue,
-    where,
+    filters: whereFilters,
     anomalyDetector: {
       triggerType,
       anomalyGradeThresholdValue,
@@ -209,14 +214,40 @@ export function documentLevelTriggerToFormik(trigger, monitor) {
     name,
     severity,
     script,
-    actions,
+    actions: getExecutionPolicyActions(actions),
     minTimeBetweenExecutions,
     rollingWindowSize,
     triggerConditions: triggerUiMetadata,
   };
 }
 
-export function getBucketLevelTriggerActions(actions) {
+export function compositeTriggerToFormik(trigger, monitor) {
+  const {
+    id,
+    name,
+    severity,
+    condition: { script },
+    actions,
+  } = trigger[TRIGGER_TYPE.COMPOSITE_LEVEL];
+
+  const triggerConditions = _.get(
+    monitor,
+    'triggers[0].chained_alert_trigger.condition.script.source',
+    ''
+  );
+
+  return {
+    ..._.cloneDeep(FORMIK_INITIAL_TRIGGER_VALUES),
+    id,
+    name,
+    severity,
+    script,
+    actions,
+    triggerConditions: triggerConditions,
+  };
+}
+
+export function getExecutionPolicyActions(actions) {
   const executionPolicyPath = 'action_execution_policy.action_execution_scope';
   return _.cloneDeep(actions).map((action) => {
     const actionExecutionPolicy = _.get(action, `${executionPolicyPath}`);
@@ -290,21 +321,25 @@ export function convertToTriggerCondition(conditionArray, condition) {
   };
 }
 
-export function getWhereExpression(composite_agg_filter) {
-  if (composite_agg_filter === undefined) return;
+export function getWhereFilters(composite_agg_filter) {
+  if (composite_agg_filter === undefined) return [];
 
   const fields = _.keys(composite_agg_filter);
-  const field = fields[0];
-
-  const fieldName = fields.map((field) => ({ label: field, type: `keyword` }));
-  const operator = _.keys(composite_agg_filter[field])[0];
-  const fieldValue = composite_agg_filter[field][operator];
-
-  return {
-    fieldName: fieldName,
-    operator: operator,
-    fieldValue: fieldValue,
-  };
+  const filters = [];
+  fields.forEach((field) => {
+    const filter = composite_agg_filter[field];
+    const operators = _.keys(filter);
+    operators.forEach((operator) => {
+      const fieldValue = filter[operator];
+      const filterItem = {
+        fieldName: [{ label: field, type: `keyword` }],
+        operator: operator,
+        fieldValue: fieldValue,
+      };
+      filters.push(filterItem);
+    });
+  });
+  return filters;
 }
 
 export function segmentArray(scriptSource, segmentSize) {

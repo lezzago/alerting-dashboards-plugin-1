@@ -4,8 +4,9 @@
  */
 
 import { schema } from '@osd/config-schema';
+import { createValidateQuerySchema } from '../services/utils/helpers';
 
-export default function (services, router) {
+export default function (services, router, dataSourceEnabled) {
   const { opensearchService } = services;
 
   router.post(
@@ -13,6 +14,7 @@ export default function (services, router) {
       path: '/api/alerting/_search',
       validate: {
         body: schema.any(),
+        query: createValidateQuerySchema(dataSourceEnabled),
       },
     },
     opensearchService.search
@@ -25,6 +27,7 @@ export default function (services, router) {
         body: schema.object({
           index: schema.string(),
         }),
+        query: createValidateQuerySchema(dataSourceEnabled),
       },
     },
     opensearchService.getIndices
@@ -37,6 +40,7 @@ export default function (services, router) {
         body: schema.object({
           alias: schema.string(),
         }),
+        query: createValidateQuerySchema(dataSourceEnabled),
       },
     },
     opensearchService.getAliases
@@ -49,6 +53,7 @@ export default function (services, router) {
         body: schema.object({
           index: schema.arrayOf(schema.string()),
         }),
+        query: createValidateQuerySchema(dataSourceEnabled),
       },
     },
     opensearchService.getMappings
@@ -57,7 +62,9 @@ export default function (services, router) {
   router.get(
     {
       path: '/api/alerting/_plugins',
-      validate: false,
+      validate: {
+        query: createValidateQuerySchema(dataSourceEnabled),
+      },
     },
     opensearchService.getPlugins
   );
@@ -65,8 +72,20 @@ export default function (services, router) {
   router.get(
     {
       path: '/api/alerting/_settings',
-      validate: false,
+      validate: {
+        query: createValidateQuerySchema(dataSourceEnabled),
+      },
     },
     opensearchService.getSettings
+  );
+
+  router.get(
+    {
+      path: '/api/alerting/_health',
+      validate: {
+        query: createValidateQuerySchema(dataSourceEnabled),
+      },
+    },
+    opensearchService.getClusterHealth
   );
 }

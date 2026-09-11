@@ -7,7 +7,7 @@ import React, { Component } from 'react';
 import _ from 'lodash';
 import {
   EuiBasicTable,
-  EuiButton,
+  EuiSmallButton,
   EuiFlexGroup,
   EuiFlexItem,
   EuiHorizontalRule,
@@ -17,11 +17,13 @@ import {
   EuiTab,
   EuiTabs,
   EuiText,
+  EuiToolTip,
+  EuiSmallButtonIcon,
 } from '@elastic/eui';
 import { getTime } from '../../../../pages/MonitorDetails/components/MonitorOverview/utils/getOverviewStats';
-import { PLUGIN_NAME } from '../../../../../utils/constants';
 import {
   ALERT_STATE,
+  DEFAULT_EMPTY_DATA,
   MONITOR_GROUP_BY,
   MONITOR_INPUT_DETECTOR_ID,
   MONITOR_TYPE,
@@ -31,10 +33,12 @@ import {
 import { TRIGGER_TYPE } from '../../../../pages/CreateTrigger/containers/CreateTrigger/utils/constants';
 import { UNITS_OF_TIME } from '../../../../pages/CreateMonitor/components/MonitorExpressions/expressions/utils/constants';
 import { DEFAULT_WHERE_EXPRESSION_TEXT } from '../../../../pages/CreateMonitor/components/MonitorExpressions/expressions/utils/whereHelpers';
-import { backendErrorNotification } from '../../../../utils/helpers';
 import {
-  displayAcknowledgedAlertsToast,
-  filterActiveAlerts,
+  acknowledgeAlerts,
+  backendErrorNotification,
+  getSeverityText,
+} from '../../../../utils/helpers';
+import {
   getQueryObjectFromState,
   getURLQueryParams,
   insertGroupByColumn,
@@ -46,12 +50,21 @@ import { queryColumns } from '../../../../pages/Dashboard/utils/tableUtils';
 import { DEFAULT_PAGE_SIZE_OPTIONS } from '../../../../pages/Monitors/containers/Monitors/utils/constants';
 import queryString from 'query-string';
 import { MAX_ALERT_COUNT } from '../../../../pages/Dashboard/utils/constants';
-import { SEVERITY_OPTIONS } from '../../../../pages/CreateTrigger/utils/constants';
 import {
-  ALERTS_FINDING_COLUMN,
+  getAlertsFindingColumn,
   TABLE_TAB_IDS,
-} from '../../../../pages/Dashboard/components/FindingsDashboard/utils';
+} from '../../../../pages/Dashboard/components/FindingsDashboard/findingsUtils';
 import FindingsDashboard from '../../../../pages/Dashboard/containers/FindingsDashboard';
+import { CLUSTER_METRICS_CROSS_CLUSTER_ALERT_TABLE_COLUMN } from '../../../../pages/CreateMonitor/components/ClusterMetricsMonitor/utils/clusterMetricsMonitorConstants';
+import {
+  getDataSources,
+  getLocalClusterName,
+} from '../../../../pages/CreateMonitor/components/CrossClusterConfigurations/utils/helpers';
+import {
+  appendCommentsAction,
+  getDataSourceId,
+  getIsCommentsEnabled,
+} from '../../../../pages/utils/helpers';
 
 export const DEFAULT_NUM_FLYOUT_ROWS = 10;
 
@@ -60,21 +73,18 @@ export default class AlertsDashboardFlyoutComponent extends Component {
     super(props);
     const { location, monitors, monitor_id } = this.props;
     const monitor = _.get(_.find(monitors, { _id: monitor_id }), '_source');
-    const monitorType = _.get(monitor, 'monitor_type', MONITOR_TYPE.QUERY_LEVEL);
-    const {
-      alertState,
-      from,
-      search,
-      severityLevel,
-      size,
-      sortDirection,
-      sortField,
-    } = getURLQueryParams(location);
+    let monitorType = _.get(monitor, 'monitor_type', undefined);
+    if (!monitorType) {
+      monitorType = _.get(monitor, 'workflow_type', MONITOR_TYPE.QUERY_LEVEL);
+    }
+    const { alertState, from, search, severityLevel, size, sortDirection, sortField } =
+      getURLQueryParams(location);
 
     this.state = {
       alerts: [],
       alertState: alertState,
       loading: true,
+      localClusterName: undefined,
       monitor: monitor,
       monitorIds: [monitor_id],
       monitorType: monitorType,
@@ -89,20 +99,13 @@ export default class AlertsDashboardFlyoutComponent extends Component {
       tabContent: undefined,
       tabId: TABLE_TAB_IDS.ALERTS.id,
       totalAlerts: 0,
+      commentsEnabled: false,
     };
   }
 
   componentDidMount() {
-    const {
-      alertState,
-      page,
-      search,
-      severityLevel,
-      size,
-      sortDirection,
-      sortField,
-      monitorIds,
-    } = this.state;
+    const { alertState, page, search, severityLevel, size, sortDirection, sortField, monitorIds } =
+      this.state;
     this.getAlerts(
       page * size,
       size,
@@ -113,9 +116,15 @@ export default class AlertsDashboardFlyoutComponent extends Component {
       alertState,
       monitorIds
     );
+    this.getLocalClusterName();
+    getIsCommentsEnabled(this.props.httpClient).then((commentsEnabled) => {
+      this.setState({
+        commentsEnabled,
+      });
+    });
   }
 
-  componentDidUpdate(prevProps, prevState) {
+  componentDidUpdate(_prevProps, prevState) {
     const prevQuery = getQueryObjectFromState(prevState);
     const currQuery = getQueryObjectFromState(this.state);
     if (!_.isEqual(prevQuery, currQuery)) {
@@ -140,10 +149,12 @@ export default class AlertsDashboardFlyoutComponent extends Component {
         monitorIds
       );
     }
-    const { monitorType } = this.state;
+
+    const { monitorType, commentsEnabled, tabId } = this.state;
     if (
-      monitorType === MONITOR_TYPE.DOC_LEVEL &&
-      !_.isEqual(prevState.selectedItems, this.state.selectedItems)
+      ([MONITOR_TYPE.DOC_LEVEL, MONITOR_TYPE.COMPOSITE_LEVEL].includes(monitorType) &&
+        !_.isEqual(prevState.selectedItems, this.state.selectedItems)) ||
+      (tabId === TABLE_TAB_IDS.ALERTS.id && commentsEnabled !== prevState.commentsEnabled)
     )
       this.setState({ tabContent: this.renderAlertsTable() });
   }
@@ -151,7 +162,7 @@ export default class AlertsDashboardFlyoutComponent extends Component {
   getMultipleGraphConditions = (trigger) => {
     let conditions = _.get(trigger, 'condition.script.source');
     if (_.isEmpty(conditions)) {
-      return '-';
+      return DEFAULT_EMPTY_DATA;
     } else {
       conditions = conditions.replaceAll(' && ', '&AND&');
       conditions = conditions.replaceAll(' || ', '&OR&');
@@ -160,8 +171,10 @@ export default class AlertsDashboardFlyoutComponent extends Component {
     }
   };
 
-  getSeverityText = (severity) => {
-    return _.get(_.find(SEVERITY_OPTIONS, { value: severity }), 'text');
+  getLocalClusterName = async () => {
+    this.setState({
+      localClusterName: await getLocalClusterName(this.props.httpClient),
+    });
   };
 
   getBucketLevelGraphFilter = (trigger) => {
@@ -175,6 +188,7 @@ export default class AlertsDashboardFlyoutComponent extends Component {
 
   getAlerts = async () => {
     this.setState({ loading: true, tabContent: undefined });
+
     const {
       from,
       search,
@@ -183,8 +197,8 @@ export default class AlertsDashboardFlyoutComponent extends Component {
       severityLevel,
       alertState,
       monitorIds,
+      monitorType,
     } = this.state;
-
     const { httpClient, history, notifications, triggerID } = this.props;
 
     const params = {
@@ -196,12 +210,19 @@ export default class AlertsDashboardFlyoutComponent extends Component {
       severityLevel,
       alertState,
       monitorIds,
+      monitorType,
     };
 
     const queryParamsString = queryString.stringify(params);
     history.replace({ ...this.props.location, search: queryParamsString });
 
-    httpClient.get('../api/alerting/alerts', { query: params }).then((resp) => {
+    const dataSourceId = getDataSourceId();
+    const extendedParams = {
+      ...(dataSourceId !== undefined && { dataSourceId }),
+      ...params,
+    };
+
+    httpClient.get('../api/alerting/alerts', { query: extendedParams })?.then((resp) => {
       if (resp.ok) {
         const { alerts } = resp;
         const filteredAlerts = _.filter(alerts, { trigger_id: triggerID });
@@ -216,50 +237,19 @@ export default class AlertsDashboardFlyoutComponent extends Component {
       }
       this.setState({ tabContent: this.renderAlertsTable() });
     });
+
     this.setState({ loading: false });
   };
 
   acknowledgeAlerts = async () => {
     const { selectedItems } = this.state;
-    const { httpClient, notifications } = this.props;
-
     if (!selectedItems.length) return;
 
-    const selectedAlerts = filterActiveAlerts(selectedItems);
+    const { httpClient, notifications } = this.props;
+    acknowledgeAlerts(httpClient, notifications, selectedItems);
 
-    const monitorAlerts = selectedAlerts.reduce((monitorAlerts, alert) => {
-      const { id, monitor_id: monitorId } = alert;
-      if (monitorAlerts[monitorId]) monitorAlerts[monitorId].push(id);
-      else monitorAlerts[monitorId] = [id];
-      return monitorAlerts;
-    }, {});
-
-    Object.entries(monitorAlerts).map(([monitorId, alerts]) =>
-      httpClient
-        .post(`../api/alerting/monitors/${monitorId}/_acknowledge/alerts`, {
-          body: JSON.stringify({ alerts }),
-        })
-        .then((resp) => {
-          if (!resp.ok) {
-            backendErrorNotification(notifications, 'acknowledge', 'alert', resp.resp);
-          } else {
-            const successfulCount = _.get(resp, 'resp.success', []).length;
-            displayAcknowledgedAlertsToast(notifications, successfulCount);
-          }
-        })
-        .catch((error) => error)
-    );
-
-    const {
-      page,
-      size,
-      search,
-      sortField,
-      sortDirection,
-      severityLevel,
-      alertState,
-      monitorIds,
-    } = this.state;
+    const { page, size, search, sortField, sortDirection, severityLevel, alertState, monitorIds } =
+      this.state;
     await this.getAlerts(
       page * size,
       size,
@@ -292,7 +282,6 @@ export default class AlertsDashboardFlyoutComponent extends Component {
 
   onTableChange = ({ page: tablePage = {}, sort = {} }) => {
     const { index: page, size } = tablePage;
-
     const { field: sortField, direction: sortDirection } = sort;
     this.setState({
       page,
@@ -312,21 +301,23 @@ export default class AlertsDashboardFlyoutComponent extends Component {
         return TRIGGER_TYPE.BUCKET_LEVEL;
       case MONITOR_TYPE.DOC_LEVEL:
         return TRIGGER_TYPE.DOC_LEVEL;
+      case MONITOR_TYPE.COMPOSITE_LEVEL:
+        return TRIGGER_TYPE.COMPOSITE_LEVEL;
+      case MONITOR_TYPE.PPL:
+        return TRIGGER_TYPE.PPL;
       default:
         return TRIGGER_TYPE.QUERY_LEVEL;
     }
   }
 
   renderAlertsTable() {
-    const { trigger_name } = this.props;
-    const { monitor, monitorType } = this.state;
-    const detectorId = _.get(monitor, MONITOR_INPUT_DETECTOR_ID);
-    const groupBy = _.get(monitor, MONITOR_GROUP_BY);
-
+    const { httpClient, history, location, notifications, trigger_name } = this.props;
     const {
       alerts,
       alertState,
       loading,
+      monitor,
+      monitorType,
       page,
       search,
       selectable,
@@ -336,34 +327,77 @@ export default class AlertsDashboardFlyoutComponent extends Component {
       sortDirection,
       sortField,
       totalAlerts,
+      commentsEnabled,
     } = this.state;
+
+    const detectorId = _.get(monitor, MONITOR_INPUT_DETECTOR_ID);
+    const groupBy = _.get(monitor, MONITOR_GROUP_BY);
 
     const getItemId = (item) => {
       switch (monitorType) {
         case MONITOR_TYPE.QUERY_LEVEL:
         case MONITOR_TYPE.CLUSTER_METRICS:
         case MONITOR_TYPE.DOC_LEVEL:
+        case MONITOR_TYPE.COMPOSITE_LEVEL:
           return `${item.id}-${item.version}`;
         case MONITOR_TYPE.BUCKET_LEVEL:
           return item.id;
       }
     };
 
-    const columnType = () => {
+    const getColumns = () => {
       let columns;
       switch (monitorType) {
         case MONITOR_TYPE.BUCKET_LEVEL:
           columns = insertGroupByColumn(groupBy);
           break;
+        case MONITOR_TYPE.CLUSTER_METRICS:
+          columns = _.cloneDeep(queryColumns);
+          columns.push(CLUSTER_METRICS_CROSS_CLUSTER_ALERT_TABLE_COLUMN);
+          break;
         case MONITOR_TYPE.DOC_LEVEL:
           columns = _.cloneDeep(queryColumns);
-          columns.splice(0, 0, ALERTS_FINDING_COLUMN);
+          columns.splice(
+            0,
+            0,
+            getAlertsFindingColumn(httpClient, history, location, notifications)
+          );
+          break;
+        case MONITOR_TYPE.COMPOSITE_LEVEL:
+          columns = _.cloneDeep(queryColumns);
+          columns.push({
+            name: 'Actions',
+            sortable: false,
+            actions: [
+              {
+                render: (alert) => (
+                  <EuiToolTip content={'View details'}>
+                    <EuiSmallButtonIcon
+                      aria-label={'View details'}
+                      data-test-subj={`view-details-icon`}
+                      iconType={'inspect'}
+                      onClick={() => {
+                        this.props.openChainedAlertsFlyout?.(alert);
+                      }}
+                    />
+                  </EuiToolTip>
+                ),
+              },
+            ],
+          });
           break;
         default:
           columns = queryColumns;
           break;
       }
-      return removeColumns(['severity', 'trigger_name'], columns);
+
+      columns = removeColumns(['severity', 'trigger_name'], columns);
+
+      if (commentsEnabled) {
+        columns = appendCommentsAction(columns, httpClient);
+      }
+
+      return columns;
     };
 
     const pagination = {
@@ -390,28 +424,31 @@ export default class AlertsDashboardFlyoutComponent extends Component {
 
     const actions = () => {
       const actions = [
-        <EuiButton
+        <EuiSmallButton
           onClick={this.acknowledgeAlerts}
           disabled={selectedItems.length <= 0}
           data-test-subj={'flyoutAcknowledgeAlertsButton'}
         >
           Acknowledge
-        </EuiButton>,
+        </EuiSmallButton>,
       ];
+
       if (!_.isEmpty(detectorId)) {
         actions.unshift(
-          <EuiButton
+          <EuiSmallButton
             href={`${OPENSEARCH_DASHBOARDS_AD_PLUGIN}#/detectors/${detectorId}`}
             target="_blank"
           >
             View detector <EuiIcon type="popout" />
-          </EuiButton>
+          </EuiSmallButton>
         );
       }
+
       return actions;
     };
 
     const trimmedAlerts = alerts.slice(page * size, page * size + size);
+
     return (
       <ContentPanel
         title={'Alerts'}
@@ -429,8 +466,10 @@ export default class AlertsDashboardFlyoutComponent extends Component {
           onStateChange={this.onAlertStateChange}
           onPageChange={this.onPageClick}
           isAlertsFlyout={true}
+          monitorType={monitorType}
+          panelStyles={{ padding: '8px 0px 16px' }}
         />
-        <EuiHorizontalRule margin="xs" />
+
         <EuiBasicTable
           items={loading ? [] : trimmedAlerts}
           /*
@@ -439,12 +478,13 @@ export default class AlertsDashboardFlyoutComponent extends Component {
            * $id-$version will correctly remove selected items
            * */
           itemId={getItemId}
-          columns={columnType()}
+          columns={getColumns()}
           loading={loading}
           pagination={pagination}
           sorting={sorting}
           isSelectable={selectable}
           selection={selection}
+          hasActions={true}
           onChange={this.onTableChange}
           noItemsMessage={loading ? 'Loading alerts...' : 'No alerts.'}
           data-test-subj={`alertsDashboardFlyout_table_${trigger_name}`}
@@ -453,10 +493,11 @@ export default class AlertsDashboardFlyoutComponent extends Component {
     );
   }
 
-  renderFindingsTable() {
+  renderFindingsTable(findingId) {
     const { httpClient, history, location, monitor_id, notifications } = this.props;
     return (
       <FindingsDashboard
+        findingId={findingId}
         isAlertsFlyout={true}
         isPreview={false}
         monitorId={monitor_id}
@@ -474,7 +515,6 @@ export default class AlertsDashboardFlyoutComponent extends Component {
       { ...TABLE_TAB_IDS.ALERTS, content: this.renderAlertsTable() },
       { ...TABLE_TAB_IDS.FINDINGS, content: this.renderFindingsTable() },
     ];
-
     return tabs.map((tab, index) => (
       <EuiTab
         key={`${tab.id}${index}`}
@@ -501,10 +541,10 @@ export default class AlertsDashboardFlyoutComponent extends Component {
       triggerID,
       trigger_name,
     } = this.props;
-    const { loading, monitor, monitorType, tabContent } = this.state;
+    const { loading, localClusterName, monitor, monitorType, tabContent } = this.state;
+
     const searchType = _.get(monitor, 'ui_metadata.search.searchType', SEARCH_TYPE.GRAPH);
     const triggerType = this.getTriggerType(monitorType);
-
     let trigger = _.get(monitor, 'triggers', []).find(
       (trigger) => trigger[triggerType].id === triggerID
     );
@@ -513,11 +553,20 @@ export default class AlertsDashboardFlyoutComponent extends Component {
     const severity = _.get(trigger, 'severity');
     const groupBy = _.get(monitor, MONITOR_GROUP_BY);
 
-    const condition =
+    let condition;
+    if (triggerType === TRIGGER_TYPE.PPL) {
+      // The PPL trigger data model stores conditions differently than other trigger types
+      condition =
+        trigger.custom_condition || `${trigger.num_results_condition} ${trigger.num_results_value}`;
+    } else if (
       searchType === SEARCH_TYPE.GRAPH &&
       (monitorType === MONITOR_TYPE.BUCKET_LEVEL || monitorType === MONITOR_TYPE.DOC_LEVEL)
-        ? this.getMultipleGraphConditions(trigger)
-        : _.get(trigger, 'condition.script.source', '-');
+    ) {
+      condition = this.getMultipleGraphConditions(trigger);
+    } else {
+      condition = _.get(trigger, 'condition.script.source');
+    }
+    if (_.isEmpty(condition)) condition = DEFAULT_EMPTY_DATA;
 
     let displayMultipleConditions;
     switch (monitorType) {
@@ -532,17 +581,18 @@ export default class AlertsDashboardFlyoutComponent extends Component {
     const filters =
       monitorType === MONITOR_TYPE.BUCKET_LEVEL && searchType === SEARCH_TYPE.GRAPH
         ? this.getBucketLevelGraphFilter(trigger)
-        : '-';
+        : DEFAULT_EMPTY_DATA;
 
     const bucketValue = _.get(monitor, 'ui_metadata.search.bucketValue');
     let bucketUnitOfTime = _.get(monitor, 'ui_metadata.search.bucketUnitOfTime');
     UNITS_OF_TIME.map((entry) => {
       if (entry.value === bucketUnitOfTime) bucketUnitOfTime = entry.text;
     });
+
     const timeRangeForLast =
       bucketValue !== undefined && !_.isEmpty(bucketUnitOfTime)
         ? `${bucketValue} ${bucketUnitOfTime}`
-        : '-';
+        : DEFAULT_EMPTY_DATA;
 
     let displayTableTabs;
     switch (monitorType) {
@@ -553,121 +603,115 @@ export default class AlertsDashboardFlyoutComponent extends Component {
         displayTableTabs = false;
         break;
     }
+
+    const monitorUrl = `#/monitors/${monitor_id}${
+      monitorType === MONITOR_TYPE.COMPOSITE_LEVEL ? '?type=workflow' : ''
+    }`;
+
+    const dataSources = getDataSources(monitor, localClusterName).join('\n');
+
+    // Only display the 'Filters', 'Time range for last', and 'Group by' sections for specific monitor types
+    const displayMonitorFilters = [MONITOR_TYPE.BUCKET_LEVEL, MONITOR_TYPE.QUERY_LEVEL].includes(
+      monitorType
+    );
     return (
       <div>
         <EuiFlexGroup>
           <EuiFlexItem>
-            <EuiText
-              size={'m'}
-              data-test-subj={`alertsDashboardFlyout_triggerName_${trigger_name}`}
-            >
+            <EuiText size="s" data-test-subj={`alertsDashboardFlyout_triggerName_${trigger_name}`}>
               <strong>Trigger name</strong>
               <p>{trigger_name}</p>
             </EuiText>
           </EuiFlexItem>
           <EuiFlexItem>
-            <EuiText size={'m'} data-test-subj={`alertsDashboardFlyout_severity_${trigger_name}`}>
+            <EuiText size="s" data-test-subj={`alertsDashboardFlyout_severity_${trigger_name}`}>
               <strong>Severity</strong>
-              <p>{this.getSeverityText(severity) || severity || '-'}</p>
+              <p>{getSeverityText(severity) || severity || DEFAULT_EMPTY_DATA}</p>
             </EuiText>
           </EuiFlexItem>
         </EuiFlexGroup>
-
         <EuiSpacer size={'xxl'} />
-
         <EuiFlexGroup>
           <EuiFlexItem>
-            <EuiText size={'m'}>
+            <EuiText size="s">
               <strong>Trigger start time</strong>
               <p>{getTime(start_time)}</p>
             </EuiText>
           </EuiFlexItem>
           <EuiFlexItem>
-            <EuiText size={'m'}>
+            <EuiText size="s">
               <strong>Trigger last updated</strong>
               <p>{getTime(last_notification_time)}</p>
             </EuiText>
           </EuiFlexItem>
         </EuiFlexGroup>
-
         <EuiSpacer size={'xxl'} />
-
         <EuiFlexGroup>
           <EuiFlexItem>
-            <EuiText size={'m'} data-test-subj={`alertsDashboardFlyout_monitor_${trigger_name}`}>
+            <EuiText size="s" data-test-subj={`alertsDashboardFlyout_monitor_${trigger_name}`}>
               <strong>Monitor</strong>
               <p>
-                <EuiLink href={`${PLUGIN_NAME}#/monitors/${monitor_id}`}>{monitor_name}</EuiLink>
+                <EuiLink href={monitorUrl}>{monitor_name}</EuiLink>
               </p>
             </EuiText>
           </EuiFlexItem>
+          <EuiFlexItem>
+            <EuiText size="s">
+              <strong>Monitor data sources</strong>
+              <p style={{ whiteSpace: 'pre-wrap' }}>{dataSources}</p>
+            </EuiText>
+          </EuiFlexItem>
         </EuiFlexGroup>
-
         <EuiHorizontalRule margin={'xxl'} />
-
         <EuiFlexGroup>
           <EuiFlexItem>
-            <EuiText size={'m'} data-test-subj={`alertsDashboardFlyout_conditions_${trigger_name}`}>
+            <EuiText size="s" data-test-subj={`alertsDashboardFlyout_conditions_${trigger_name}`}>
               <strong>{displayMultipleConditions ? 'Conditions' : 'Condition'}</strong>
               <p style={{ whiteSpace: 'pre-wrap' }}>
                 {loadingMonitors || loading ? 'Loading conditions...' : condition}
               </p>
             </EuiText>
           </EuiFlexItem>
-
-          {monitorType !== MONITOR_TYPE.DOC_LEVEL && (
+          {displayMonitorFilters && (
             <EuiFlexItem>
-              <EuiText
-                size={'m'}
-                data-test-subj={`alertsDashboardFlyout_timeRange_${trigger_name}`}
-              >
+              <EuiText size="s" data-test-subj={`alertsDashboardFlyout_timeRange_${trigger_name}`}>
                 <strong>Time range for the last</strong>
                 <p>{timeRangeForLast}</p>
               </EuiText>
             </EuiFlexItem>
           )}
         </EuiFlexGroup>
-
-        {monitorType !== MONITOR_TYPE.DOC_LEVEL && (
+        {displayMonitorFilters && (
           <div>
             <EuiSpacer size={'xxl'} />
-
             <EuiFlexGroup>
               <EuiFlexItem>
-                <EuiText
-                  size={'m'}
-                  data-test-subj={`alertsDashboardFlyout_filters_${trigger_name}`}
-                >
+                <EuiText size="s" data-test-subj={`alertsDashboardFlyout_filters_${trigger_name}`}>
                   <strong>Filters</strong>
                   <p>{loadingMonitors || loading ? 'Loading filters...' : filters}</p>
                 </EuiText>
               </EuiFlexItem>
               <EuiFlexItem>
-                <EuiText
-                  size={'m'}
-                  data-test-subj={`alertsDashboardFlyout_groupBy_${trigger_name}`}
-                >
+                <EuiText size="s" data-test-subj={`alertsDashboardFlyout_groupBy_${trigger_name}`}>
                   <strong>Group by</strong>
                   <p>
                     {loadingMonitors || loading
                       ? 'Loading groups...'
                       : !_.isEmpty(groupBy)
                       ? _.join(_.orderBy(groupBy), ', ')
-                      : '-'}
+                      : DEFAULT_EMPTY_DATA}
                   </p>
                 </EuiText>
               </EuiFlexItem>
             </EuiFlexGroup>
           </div>
         )}
-
         <EuiSpacer size={'xxl'} />
         <EuiHorizontalRule margin={'none'} />
         <EuiSpacer size={displayTableTabs ? 'l' : 'xxl'} />
-
         {displayTableTabs ? (
           <div>
-            <EuiTabs>{this.renderTableTabs()}</EuiTabs>
+            <EuiTabs size="s">{this.renderTableTabs()}</EuiTabs>
             {tabContent}
           </div>
         ) : (

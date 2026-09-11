@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Alerting OpenSearch Dashboards plugin
-        uses: actions/checkout@v2
+        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
         with:
           path: alerting-dashboards-plugin
       - name: Get OpenSearch Dashboards version
@@ -19,33 +19,32 @@ jobs:
         run: |
           echo "::set-output name=opensearch_dashboards_version::$(node -p "(require('./alerting-dashboards-plugin/opensearch_dashboards.json').opensearchDashboardsVersion).match(/[.0-9]+/)[0]")"
       - name: Checkout OpenSearch Dashboards
-        uses: actions/checkout@v2
+        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
         with:
           repository: opensearch-project/OpenSearch-Dashboards
           ref: ${{ steps.opensearch_dashboards_version.outputs.opensearch_dashboards_version }}
           token: ${{ secrets.GITHUB_OPENSEARCH_DASHBOARDS_OSS }}
           path: opensearchDashboards
-      - name: Get node and yarn versions
-        id: versions
-        run: |
-          echo "::set-output name=node_version::$(node -p "(require('./OpenSearch-Dashboards/package.json').engines.node).match(/[.0-9]+/)[0]")"
-          echo "::set-output name=yarn_version::$(node -p "(require('./OpenSearch-Dashboards/package.json').engines.yarn).match(/[.0-9]+/)[0]")"
-      - name: Setup node
-        uses: actions/setup-node@v1
+      - name: Setup Node
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3
         with:
-          node-version: ${{ steps.versions.outputs.node_version }}
+          node-version-file: './OpenSearch-Dashboards/.nvmrc'
           registry-url: 'https://registry.npmjs.org'
-      - name: Install correct yarn version for OpenSearch Dashboards
+      - name: Install Yarn
+        # Need to use bash to avoid having a windows/linux specific step
+        shell: bash
         run: |
-          npm uninstall -g yarn
-          echo "Installing yarn ${{ steps.versions_step.outputs.yarn_version }}"
-          npm i -g yarn@${{ steps.versions.outputs.yarn_version }}
+          YARN_VERSION=$(node -p "require('./OpenSearch-Dashboards/package.json').engines.yarn")
+          echo "Installing yarn@$YARN_VERSION"
+          npm i -g yarn@$YARN_VERSION
+      - run: node -v
+      - run: yarn -v
       - name: Bootstrap plugin/opensearch-dashboards
         run: |
           mkdir -p Opensearch-Dashboards/plugins
           mv alerting-dashboards-plugin Opensearch-Dashboards/plugins
           cd Opensearch-Dashboards/plugins/alerting-dashboards-plugin
-          yarn osd bootstrap
+          yarn osd bootstrap --single-version=loose
       - name: Build plugin
         id: build_zip
         run: |
@@ -54,7 +53,7 @@ jobs:
           zip_path=`ls $(pwd)/build/*.zip`
           echo "::set-output name=zip_path::$zip_path"
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@67fbcbb121271f7775d2e7715933280b06314838 # v1
         with:
           aws-access-key-id: ${{ secrets.AWS_STAGING_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_STAGING_SECRET_ACCESS_KEY }}
@@ -72,7 +71,7 @@ jobs:
           aws s3 cp --quiet $zip ${s3_prefix}${zip_outfile}
       - name: Create Github Draft Release
         id: create_release
-        uses: actions/create-release@v1.0.0
+        uses: actions/create-release@8d93430eddafb926c668181c71f579556f68668c # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -81,7 +80,7 @@ jobs:
           draft: true
           prerelease: false
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1.0.1
+        uses: actions/upload-release-asset@64e5e85fc528f162d7ba7ce2d15a3bb67efb3d80 # v1.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -90,7 +89,7 @@ jobs:
           asset_path: ${{ steps.build_zip.outputs.zip_path }}
           asset_content_type: application/zip
       - name: Upload Workflow Artifacts
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: alerting-plugin
           path: ${{ steps.build_zip.outputs.zip_path }}

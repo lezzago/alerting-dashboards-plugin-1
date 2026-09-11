@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`MonitorEmptyPrompt renders 1`] = `
 <div
@@ -12,7 +12,7 @@ exports[`MonitorEmptyPrompt renders 1`] = `
       class="euiText euiText--medium"
     >
       <div
-        class="euiText euiText--medium"
+        class="euiText euiText--small"
       >
         <p>
           There are no existing monitors. Create a monitor to add triggers and actions.
@@ -23,12 +23,9 @@ exports[`MonitorEmptyPrompt renders 1`] = `
   <div
     class="euiSpacer euiSpacer--l"
   />
-  <div
-    class="euiSpacer euiSpacer--s"
-  />
   <a
-    class="euiButton euiButton--primary euiButton--fill"
-    href="alerting#/create-monitor"
+    class="euiButton euiButton--primary euiButton--small euiButton--fill"
+    href="#/create-monitor"
     rel="noreferrer"
   >
     <span

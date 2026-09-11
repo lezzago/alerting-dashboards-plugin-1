@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`AlertsDashboardFlyoutComponent renders 1`] = `
 <div>
@@ -6,7 +6,7 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
     <EuiFlexItem>
       <EuiText
         data-test-subj="alertsDashboardFlyout_triggerName_undefined"
-        size="m"
+        size="s"
       >
         <strong>
           Trigger name
@@ -17,7 +17,7 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
     <EuiFlexItem>
       <EuiText
         data-test-subj="alertsDashboardFlyout_severity_undefined"
-        size="m"
+        size="s"
       >
         <strong>
           Severity
@@ -34,7 +34,7 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
   <EuiFlexGroup>
     <EuiFlexItem>
       <EuiText
-        size="m"
+        size="s"
       >
         <strong>
           Trigger start time
@@ -46,7 +46,7 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
     </EuiFlexItem>
     <EuiFlexItem>
       <EuiText
-        size="m"
+        size="s"
       >
         <strong>
           Trigger last updated
@@ -64,15 +64,33 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
     <EuiFlexItem>
       <EuiText
         data-test-subj="alertsDashboardFlyout_monitor_undefined"
-        size="m"
+        size="s"
       >
         <strong>
           Monitor
         </strong>
         <p>
           <EuiLink
-            href="alerting#/monitors/undefined"
+            href="#/monitors/undefined"
           />
+        </p>
+      </EuiText>
+    </EuiFlexItem>
+    <EuiFlexItem>
+      <EuiText
+        size="s"
+      >
+        <strong>
+          Monitor data sources
+        </strong>
+        <p
+          style={
+            Object {
+              "whiteSpace": "pre-wrap",
+            }
+          }
+        >
+          -
         </p>
       </EuiText>
     </EuiFlexItem>
@@ -84,7 +102,7 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
     <EuiFlexItem>
       <EuiText
         data-test-subj="alertsDashboardFlyout_conditions_undefined"
-        size="m"
+        size="s"
       >
         <strong>
           Condition
@@ -96,14 +114,14 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
             }
           }
         >
-          Loading conditions...
+          -
         </p>
       </EuiText>
     </EuiFlexItem>
     <EuiFlexItem>
       <EuiText
         data-test-subj="alertsDashboardFlyout_timeRange_undefined"
-        size="m"
+        size="s"
       >
         <strong>
           Time range for the last
@@ -122,26 +140,26 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
       <EuiFlexItem>
         <EuiText
           data-test-subj="alertsDashboardFlyout_filters_undefined"
-          size="m"
+          size="s"
         >
           <strong>
             Filters
           </strong>
           <p>
-            Loading filters...
+            -
           </p>
         </EuiText>
       </EuiFlexItem>
       <EuiFlexItem>
         <EuiText
           data-test-subj="alertsDashboardFlyout_groupBy_undefined"
-          size="m"
+          size="s"
         >
           <strong>
             Group by
           </strong>
           <p>
-            Loading groups...
+            -
           </p>
         </EuiText>
       </EuiFlexItem>
@@ -159,13 +177,13 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
   <ContentPanel
     actions={
       Array [
-        <EuiButton
+        <EuiSmallButton
           data-test-subj="flyoutAcknowledgeAlertsButton"
           disabled={true}
           onClick={[Function]}
         >
           Acknowledge
-        </EuiButton>,
+        </EuiSmallButton>,
       ]
     }
     bodyStyles={
@@ -179,16 +197,19 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
     <DashboardControls
       activePage={0}
       isAlertsFlyout={true}
+      monitorType="query_level_monitor"
       onPageChange={[Function]}
       onSearchChange={[Function]}
       onStateChange={[Function]}
       pageCount={1}
+      panelStyles={
+        Object {
+          "padding": "8px 0px 16px",
+        }
+      }
       search=""
       severity="ALL"
       state="ALL"
-    />
-    <EuiHorizontalRule
-      margin="xs"
     />
     <EuiBasicTable
       columns={
@@ -227,11 +248,12 @@ exports[`AlertsDashboardFlyoutComponent renders 1`] = `
         ]
       }
       data-test-subj="alertsDashboardFlyout_table_undefined"
+      hasActions={true}
       isSelectable={true}
       itemId={[Function]}
       items={Array []}
-      loading={true}
-      noItemsMessage="Loading alerts..."
+      loading={false}
+      noItemsMessage="No alerts."
       onChange={[Function]}
       pagination={
         Object {

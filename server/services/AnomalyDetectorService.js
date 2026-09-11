@@ -5,18 +5,16 @@
 import { get } from 'lodash';
 import { mapKeysDeep, toCamel } from './utils/helpers';
 import { anomalyResultMapper } from './utils/adHelpers';
+import { MDSEnabledClientService } from './MDSEnabledClientService';
+import { DEFAULT_HEADERS } from './utils/constants';
 
 const MAX_DETECTOR_COUNT = 1000;
-export default class DestinationsService {
-  constructor(esDriver) {
-    this.esDriver = esDriver;
-  }
-
+export default class DestinationsService extends MDSEnabledClientService {
   getDetector = async (context, req, res) => {
     const { detectorId } = req.params;
-    const { callAsCurrentUser } = this.esDriver.asScoped(req);
     try {
-      const resp = await callAsCurrentUser('alertingAD.getDetector', { detectorId });
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const resp = await client('alertingAD.getDetector', { detectorId, headers: DEFAULT_HEADERS });
       const {
         anomaly_detector,
         _seq_no: seqNo,
@@ -48,10 +46,11 @@ export default class DestinationsService {
       query: { bool: {} },
       size: MAX_DETECTOR_COUNT,
     };
-    const { callAsCurrentUser } = this.esDriver.asScoped(req);
     try {
-      const resp = await callAsCurrentUser('alertingAD.searchDetectors', {
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const resp = await client('alertingAD.searchDetectors', {
         body: searchRequest,
+        headers: DEFAULT_HEADERS,
       });
 
       const totalDetectors = resp.hits.total.value;
@@ -87,15 +86,16 @@ export default class DestinationsService {
     try {
       const { startTime = 0, endTime = 20, preview = 'false' } = req.query;
       const { detectorId } = req.params;
-      const { callAsCurrentUser } = this.esDriver.asScoped(req);
+      const client = await this.getClientBasedOnDataSource(context, req);
       if (preview == 'true') {
         const requestBody = {
           period_start: startTime,
           period_end: endTime,
         };
-        const previewResponse = await callAsCurrentUser('alertingAD.previewDetector', {
+        const previewResponse = await client('alertingAD.previewDetector', {
           detectorId,
           body: requestBody,
+          headers: DEFAULT_HEADERS,
         });
         const transformedKeys = mapKeysDeep(previewResponse, toCamel);
         return res.ok({
@@ -134,11 +134,13 @@ export default class DestinationsService {
             },
           },
         };
-        const detectorResponse = await callAsCurrentUser('alertingAD.getDetector', {
+        const detectorResponse = await client('alertingAD.getDetector', {
           detectorId,
+          headers: DEFAULT_HEADERS,
         });
-        const anomaliesResponse = await callAsCurrentUser('alertingAD.searchResults', {
+        const anomaliesResponse = await client('alertingAD.searchResults', {
           body: requestBody,
+          headers: DEFAULT_HEADERS,
         });
         const transformedKeys = get(anomaliesResponse, 'hits.hits', []).map((result) =>
           mapKeysDeep(result._source, toCamel)

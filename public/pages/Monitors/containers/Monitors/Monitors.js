@@ -6,7 +6,7 @@
 import React, { Component } from 'react';
 import _ from 'lodash';
 import queryString from 'query-string';
-import { EuiBasicTable, EuiHorizontalRule } from '@elastic/eui';
+import { EuiBasicTable, EuiSpacer, EuiFlexGroup, EuiFlexItem, EuiTitle } from '@elastic/eui';
 import AcknowledgeModal from '../../components/AcknowledgeModal';
 import ContentPanel from '../../../../components/ContentPanel';
 import MonitorActions from '../../components/MonitorActions';
@@ -16,8 +16,25 @@ import { DEFAULT_PAGE_SIZE_OPTIONS, DEFAULT_QUERY_PARAMS } from './utils/constan
 import { getURLQueryParams } from './utils/helpers';
 import { columns as staticColumns } from './utils/tableUtils';
 import { MONITOR_ACTIONS, MONITOR_TYPE } from '../../../../utils/constants';
-import { backendErrorNotification } from '../../../../utils/helpers';
+import {
+  backendErrorNotification,
+  deleteMonitor,
+  fetchAndUpdateMonitor,
+} from '../../../../utils/helpers';
+import { deletePplMonitor, isPplMonitor } from '../../../../utils/pplHelpers';
 import { displayAcknowledgedAlertsToast } from '../../../Dashboard/utils/helpers';
+import { DeleteMonitorModal } from '../../../../components/DeleteModal/DeleteMonitorModal';
+import {
+  getDataSourceQueryObj,
+  isDataSourceChanged,
+  getDataSourceId,
+} from '../../../utils/helpers';
+import {
+  ALERTING_WORKFLOW_RESOURCE_TYPE,
+  getUseUpdatedUx,
+  getResourceSharingAvailableTypes,
+  MONITOR_RESOURCE_TYPE,
+} from '../../../../services';
 
 const MAX_MONITOR_COUNT = 1000;
 
@@ -26,7 +43,6 @@ const MAX_MONITOR_COUNT = 1000;
 export default class Monitors extends Component {
   constructor(props) {
     super(props);
-
     const { from, size, search, sortField, sortDirection, state } = getURLQueryParams(
       this.props.location
     );
@@ -45,15 +61,15 @@ export default class Monitors extends Component {
       monitors: [],
       monitorState: state,
       loadingMonitors: true,
+      monitorItemsToDelete: undefined,
+      resourceSharingAvailableTypes: [],
     };
-
     this.getMonitors = _.debounce(this.getMonitors.bind(this), 500, { leading: true });
     this.onTableChange = this.onTableChange.bind(this);
     this.onMonitorStateChange = this.onMonitorStateChange.bind(this);
     this.onSelectionChange = this.onSelectionChange.bind(this);
     this.onSearchChange = this.onSearchChange.bind(this);
     this.updateMonitor = this.updateMonitor.bind(this);
-    this.deleteMonitor = this.deleteMonitor.bind(this);
     this.updateMonitors = this.updateMonitors.bind(this);
     this.deleteMonitors = this.deleteMonitors.bind(this);
     this.onClickAcknowledge = this.onClickAcknowledge.bind(this);
@@ -70,50 +86,113 @@ export default class Monitors extends Component {
     this.getActiveAlerts = this.getActiveAlerts.bind(this);
     this.onClickCancel = this.onClickCancel.bind(this);
     this.resetFilters = this.resetFilters.bind(this);
-
-    this.columns = [
-      ...staticColumns,
-      {
-        name: 'Actions',
-        width: '75px',
-        actions: [
-          {
-            name: 'Acknowledge',
-            description: 'Acknowledge this Monitor',
-            onClick: this.onClickAcknowledge,
-          },
-          {
-            name: 'Enable',
-            description: 'Enable this Monitor',
-            onClick: this.onClickEnable,
-          },
-          {
-            name: 'Disable',
-            description: 'Disable this Monitor',
-            onClick: this.onClickDisable,
-          },
-          {
-            name: 'Delete',
-            description: 'Delete this Monitor',
-            onClick: this.onClickDelete,
-          },
-        ],
-      },
-    ];
+    this.buildColumns = this.buildColumns.bind(this);
   }
 
   componentDidMount() {
     const { page, size, search, sortField, sortDirection, monitorState } = this.state;
     this.getMonitors(page * size, size, search, sortField, sortDirection, monitorState);
+    this.loadResourceSharingAvailability();
+  }
+
+  loadResourceSharingAvailability = async () => {
+    const availableTypes = await getResourceSharingAvailableTypes(this.props.landingDataSourceId);
+    this.setState({ resourceSharingAvailableTypes: availableTypes });
+  };
+
+  buildColumns() {
+    const actions = [
+      {
+        name: 'Acknowledge',
+        description: 'Acknowledge this Monitor',
+        onClick: this.onClickAcknowledge,
+      },
+    ];
+
+    actions.push(
+      {
+        name: 'Edit',
+        description: 'Edit this Monitor',
+        onClick: (item) => {
+          this.setState({ selectedItems: [item] }, () => {
+            this.onClickEdit();
+          });
+        },
+      },
+      {
+        name: 'Enable',
+        description: 'Enable this Monitor',
+        onClick: this.onClickEnable,
+        available: (item) => !item.enabled,
+      },
+      {
+        name: 'Disable',
+        description: 'Disable this Monitor',
+        onClick: this.onClickDisable,
+        available: (item) => item.enabled,
+      },
+      {
+        name: 'Delete',
+        description: 'Delete this Monitor',
+        onClick: this.onClickDelete,
+      }
+    );
+
+    return [
+      ...staticColumns,
+      ...(this.state.resourceSharingAvailableTypes.includes(MONITOR_RESOURCE_TYPE) ||
+      this.state.resourceSharingAvailableTypes.includes(ALERTING_WORKFLOW_RESOURCE_TYPE)
+        ? [
+            {
+              // Resource-sharing SPI marker column: the centralized Share
+              // button is mounted here by security-dashboards-plugin when
+              // installed and resource sharing is enabled for monitors or
+              // composite (workflow) monitors.
+              field: 'id',
+              name: 'Access',
+              sortable: false,
+              width: '120px',
+              render: (id, item) => {
+                const resourceType =
+                  item.monitor?.type === 'workflow'
+                    ? ALERTING_WORKFLOW_RESOURCE_TYPE
+                    : MONITOR_RESOURCE_TYPE;
+                return this.state.resourceSharingAvailableTypes.includes(resourceType) ? (
+                  <div
+                    data-resource-share-button
+                    data-resource-id={id}
+                    data-resource-type={resourceType}
+                    {...(item.name ? { 'data-resource-name': item.name } : {})}
+                    data-resource-share-display="icon"
+                  />
+                ) : null;
+              },
+            },
+          ]
+        : []),
+      {
+        name: 'Actions',
+        width: '60px',
+        actions,
+      },
+    ];
   }
 
   componentDidUpdate(prevProps, prevState) {
     const prevQuery = this.getQueryObjectFromState(prevState);
     const currQuery = this.getQueryObjectFromState(this.state);
     if (!_.isEqual(prevQuery, currQuery)) {
-      const { page, size, search, sortField, sortDirection, monitorState } = this.state;
-      this.getMonitors(page * size, size, search, sortField, sortDirection, monitorState);
+      this.updateMonitorList();
     }
+    if (isDataSourceChanged(prevProps, this.props)) {
+      this.updateMonitorList();
+      this.loadResourceSharingAvailability();
+    }
+  }
+
+  updateMonitorList() {
+    const { page, size, search, sortField, sortDirection, monitorState } = this.state;
+    this.getMonitors(page * size, size, search, sortField, sortDirection, monitorState);
   }
 
   getQueryObjectFromState({ page, size, search, sortField, sortDirection, monitorState }) {
@@ -127,42 +206,30 @@ export default class Monitors extends Component {
     };
   }
 
-  // TODO: The getMonitors API is wrapping the 'monitor' field for ClusterMetrics monitors in an additional 'monitor' object.
-  //  This formatGetMonitorsResponse method is a temporary means of resolving that issue until it can be debugged on the backend.
-  formatGetMonitorsResponse = (monitors) => {
-    const unwrappedMonitors = [];
-    monitors.forEach((monitor) => {
-      const monitorType = _.get(monitor, 'monitor.monitor.monitor_type', 'monitor.monitor_type');
-      switch (monitorType) {
-        case MONITOR_TYPE.CLUSTER_METRICS:
-          let unwrappedMonitor = monitor.monitor;
-          _.set(monitor, 'monitor', unwrappedMonitor.monitor);
-          _.set(monitor, 'name', monitor.monitor.name);
-          _.set(monitor, 'enabled', monitor.monitor.enabled);
-          unwrappedMonitors.push(monitor);
-          break;
-        default:
-          unwrappedMonitors.push(monitor);
-      }
-    });
-    return unwrappedMonitors;
-  };
-
   async getMonitors(from, size, search, sortField, sortDirection, state) {
     this.setState({ loadingMonitors: true });
     try {
-      const params = { from, size, search, sortField, sortDirection, state };
+      const dataSourceId = this.props.landingDataSourceId;
+      const params = { from, size, search, sortField, sortDirection, state, dataSourceId };
       const queryParamsString = queryString.stringify(params);
       const { httpClient, history } = this.props;
       history.replace({ ...this.props.location, search: queryParamsString });
-      const response = await httpClient.get('../api/alerting/monitors', { query: params });
-      if (response.ok) {
-        const { monitors, totalMonitors } = response;
-        this.setState({ monitors: this.formatGetMonitorsResponse(monitors), totalMonitors });
-      } else {
+      const extendedParams = {
+        ...(dataSourceId !== undefined && { dataSourceId }),
+        ...params,
+      };
+
+      const response = await httpClient.get('../api/alerting/monitors', { query: extendedParams });
+      if (response?.ok === false) {
+        if (dataSourceId !== undefined) {
+          this.setState({ monitors: [], totalMonitors: 0 });
+        }
         console.log('error getting monitors:', response);
-        // TODO: 'response.ok' is 'false' when there is no alerting config index in the cluster, and notification should not be shown to new Alerting users
-        // backendErrorNotification(notifications, 'get', 'monitors', response.resp);
+      } else {
+        const legacyMonitors = Array.isArray(response?.monitors) ? response.monitors : [];
+        const monitors = legacyMonitors;
+        const totalMonitors = Number(response?.totalMonitors ?? legacyMonitors.length) || 0;
+        this.setState({ monitors, totalMonitors, selectedItems: [] });
       }
     } catch (err) {
       console.error(err);
@@ -188,38 +255,17 @@ export default class Monitors extends Component {
     this.setState({ page: 0, search: e.target.value });
   }
 
-  updateMonitor(item, update) {
+  async updateMonitor(item, update) {
     const { httpClient, notifications } = this.props;
-    const { id, ifSeqNo, ifPrimaryTerm, monitor } = item;
-    return httpClient
-      .put(`../api/alerting/monitors/${id}`, {
-        query: { ifSeqNo, ifPrimaryTerm },
-        body: JSON.stringify({ ...monitor, ...update }),
-      })
-      .then((resp) => {
-        if (!resp.ok) {
-          backendErrorNotification(notifications, 'update', 'monitor', resp.resp);
-        }
-        return resp;
-      })
-      .catch((err) => err);
+    const dataSourceQuery = getDataSourceQueryObj();
+
+    return fetchAndUpdateMonitor(httpClient, notifications, item.id, update, dataSourceQuery, {
+      ifSeqNo: item.ifSeqNo,
+      ifPrimaryTerm: item.ifPrimaryTerm,
+    });
   }
 
-  deleteMonitor(item) {
-    const { httpClient, notifications } = this.props;
-    const { id, version } = item;
-    return httpClient
-      .delete(`../api/alerting/monitors/${id}`, { query: { version } })
-      .then((resp) => {
-        if (!resp.ok) {
-          backendErrorNotification(notifications, 'delete', 'monitor', resp.resp);
-        }
-        return resp;
-      })
-      .catch((err) => err);
-  }
-
-  updateMonitors(items, update) {
+  async updateMonitors(items, update) {
     const arrayOfPromises = items.map((item) =>
       this.updateMonitor(item, update).catch((error) => error)
     );
@@ -232,8 +278,15 @@ export default class Monitors extends Component {
     });
   }
 
-  deleteMonitors(items) {
-    const arrayOfPromises = items.map((item) => this.deleteMonitor(item).catch((error) => error));
+  async deleteMonitors(items) {
+    const { httpClient, notifications } = this.props;
+    const arrayOfPromises = items.map((item) => {
+      const monitorBody = item?.monitor || item;
+      const deleteFn = isPplMonitor(monitorBody) ? deletePplMonitor : deleteMonitor;
+      return deleteFn(item, httpClient, notifications, getDataSourceQueryObj()).catch(
+        (error) => error
+      );
+    });
 
     return Promise.all(arrayOfPromises).then((values) => {
       // TODO: Show which values failed, succeeded, etc.
@@ -251,16 +304,19 @@ export default class Monitors extends Component {
     const { httpClient, notifications } = this.props;
 
     const monitorAlerts = alerts.reduce((monitorAlerts, alert) => {
-      const { id, monitor_id: monitorId } = alert;
-      if (monitorAlerts[monitorId]) monitorAlerts[monitorId].push(id);
-      else monitorAlerts[monitorId] = [id];
+      const { id, monitor_id, workflow_id, alert_source } = alert;
+      const monitorId = workflow_id || monitor_id;
+      if (monitorAlerts[monitorId]) monitorAlerts[monitorId].ids.push(id);
+      else monitorAlerts[monitorId] = { ids: [id], alert_source };
       return monitorAlerts;
     }, {});
 
-    const promises = Object.entries(monitorAlerts).map(([monitorId, alerts]) =>
+    const promises = Object.entries(monitorAlerts).map(([monitorId, { ids, alert_source }]) => {
+      const poolType = alert_source === 'workflow' ? 'workflows' : 'monitors';
       httpClient
-        .post(`../api/alerting/monitors/${monitorId}/_acknowledge/alerts`, {
-          body: JSON.stringify({ alerts }),
+        .post(`../api/alerting/${poolType}/${monitorId}/_acknowledge/alerts`, {
+          body: JSON.stringify({ alerts: ids }),
+          query: getDataSourceQueryObj()?.query,
         })
         .then((resp) => {
           if (!resp.ok) {
@@ -270,8 +326,8 @@ export default class Monitors extends Component {
             displayAcknowledgedAlertsToast(notifications, successfulCount);
           }
         })
-        .catch((error) => error)
-    );
+        .catch((error) => error);
+    });
 
     const values = await Promise.all(promises);
     // TODO: Show which values failed, succeeded, etc.
@@ -284,7 +340,15 @@ export default class Monitors extends Component {
     const {
       selectedItems: [{ id }],
     } = this.state;
-    if (id) this.props.history.push(`/monitors/${id}?action=${MONITOR_ACTIONS.UPDATE_MONITOR}`);
+    if (id) {
+      const dataSourceId = getDataSourceId();
+      const params = new URLSearchParams();
+      params.append('action', MONITOR_ACTIONS.EDIT_MONITOR);
+      if (dataSourceId) {
+        params.append('dataSourceId', dataSourceId);
+      }
+      this.props.history.push(`/monitors/${id}?${params.toString()}`);
+    }
   }
 
   onClickEnable(item) {
@@ -292,7 +356,9 @@ export default class Monitors extends Component {
   }
 
   onClickDelete(item) {
-    this.deleteMonitors([item]);
+    this.setState({
+      monitorItemsToDelete: [item],
+    });
   }
 
   onClickDisable(item) {
@@ -308,7 +374,7 @@ export default class Monitors extends Component {
   }
 
   onBulkDelete() {
-    this.deleteMonitors(this.state.selectedItems);
+    this.setState({ monitorItemsToDelete: this.state.selectedItems });
   }
 
   onBulkDisable() {
@@ -320,8 +386,13 @@ export default class Monitors extends Component {
   }
 
   async getActiveAlerts(selectedItems) {
-    const monitorIds = selectedItems.map((monitor) => monitor.id);
-    if (!monitorIds.length) return;
+    const monitorIds = selectedItems
+      .filter((item) => item.item_type !== MONITOR_TYPE.COMPOSITE_LEVEL)
+      .map((monitor) => monitor.id);
+    const workflowIds = selectedItems
+      .filter((item) => item.item_type === MONITOR_TYPE.COMPOSITE_LEVEL)
+      .map((monitor) => monitor.id);
+    if (!monitorIds.length && !workflowIds.length) return;
     // TODO: Limiting to 100.. otherwise could be bringing back large amount of alerts that all need to be acknowledged 1 by 1, handle case when there are more than 100 on UI
     const params = {
       from: 0,
@@ -333,20 +404,53 @@ export default class Monitors extends Component {
     };
 
     const { httpClient, notifications } = this.props;
+    let allAlerts = [];
+    let totalAlertsCount = 0;
 
-    const response = await httpClient.get('../api/alerting/alerts', { query: params });
+    const dataSourceId = getDataSourceId();
+    const extendedParams = {
+      ...(dataSourceId !== undefined && { dataSourceId }), // Only include dataSourceId if it exists
+      ...params, // Other parameters
+    };
 
-    if (response.ok) {
-      const { alerts, totalAlerts } = response;
-      this.setState({
-        alerts,
-        totalAlerts,
-        showAcknowledgeModal: true,
+    if (monitorIds.length > 0) {
+      const monitorAlertsResponse = await httpClient.get('../api/alerting/alerts', {
+        query: extendedParams,
       });
-    } else {
-      console.error(response);
-      backendErrorNotification(notifications, 'get', 'alerts', response.err);
+      if (!monitorAlertsResponse.ok) {
+        console.error(monitorAlertsResponse);
+        backendErrorNotification(notifications, 'get', 'alerts', monitorAlertsResponse.err);
+      } else {
+        const { alerts, totalAlerts } = monitorAlertsResponse;
+        allAlerts = allAlerts.concat(alerts);
+        totalAlertsCount += totalAlerts;
+      }
     }
+
+    if (workflowIds.length > 0) {
+      const chainedAlertsResponse = await httpClient.get('../api/alerting/alerts', {
+        query: {
+          ...extendedParams,
+          monitorIds: workflowIds,
+          monitorType: MONITOR_TYPE.COMPOSITE_LEVEL,
+        },
+      });
+
+      if (!chainedAlertsResponse.ok) {
+        console.error(chainedAlertsResponse);
+        backendErrorNotification(notifications, 'get', 'alerts', chainedAlertsResponse.err);
+      } else {
+        const { alerts, totalAlerts } = chainedAlertsResponse;
+        allAlerts = allAlerts.concat(alerts);
+        totalAlertsCount += totalAlerts;
+      }
+    }
+
+    this.setState({
+      alerts: allAlerts,
+      totalAlerts: totalAlertsCount,
+      showAcknowledgeModal: true,
+    });
   }
 
   onClickCancel() {
@@ -364,6 +468,10 @@ export default class Monitors extends Component {
     return `${item.id}-${item.currentTime}`;
   }
 
+  isDeleteNotSupported = (items) => {
+    return items.length > 1 && items.some((item) => item.associatedCompositeMonitorCnt > 0);
+  };
+
   render() {
     const {
       alerts,
@@ -379,6 +487,7 @@ export default class Monitors extends Component {
       totalAlerts,
       totalMonitors,
       loadingMonitors,
+      monitorItemsToDelete,
     } = this.state;
     const filterIsApplied = !!search || monitorState !== DEFAULT_QUERY_PARAMS.state;
 
@@ -401,68 +510,90 @@ export default class Monitors extends Component {
       selectableMessage: (selectable) => (selectable ? undefined : undefined),
     };
 
-    return (
-      <ContentPanel
-        actions={
-          <MonitorActions
-            isEditDisabled={selectedItems.length !== 1}
-            onBulkAcknowledge={this.onBulkAcknowledge}
-            onBulkEnable={this.onBulkEnable}
-            onBulkDisable={this.onBulkDisable}
-            onBulkDelete={this.onBulkDelete}
-            onClickEdit={this.onClickEdit}
-          />
+    const useUpdatedUx = getUseUpdatedUx();
+    const monitorActions = (
+      <MonitorActions
+        isEditDisabled={selectedItems.length !== 1}
+        isDeleteDisabled={selectedItems.length === 0 || this.isDeleteNotSupported(selectedItems)}
+        onBulkAcknowledge={this.onBulkAcknowledge}
+        onBulkEnable={this.onBulkEnable}
+        onBulkDisable={this.onBulkDisable}
+        onBulkDelete={this.onBulkDelete}
+        onClickEdit={this.onClickEdit}
+        hasMonitors={monitors.length > 0}
+        isEnableDisabled={selectedItems.length === 0 || selectedItems.every((item) => item.enabled)}
+        isDisableDisabled={
+          selectedItems.length === 0 || selectedItems.every((item) => !item.enabled)
         }
-        bodyStyles={{ padding: 'initial' }}
-        title="Monitors"
-      >
-        <MonitorControls
-          activePage={page}
-          pageCount={Math.ceil(totalMonitors / size) || 1}
-          search={search}
-          state={monitorState}
-          onSearchChange={this.onSearchChange}
-          onStateChange={this.onMonitorStateChange}
-          onPageClick={this.onPageClick}
-        />
+      />
+    );
 
-        <EuiHorizontalRule margin="xs" />
+    return (
+      <>
+        <ContentPanel
+          actions={useUpdatedUx ? undefined : monitorActions}
+          bodyStyles={{ padding: 'initial' }}
+          title={useUpdatedUx ? undefined : 'Monitors'}
+          panelOptions={{ hideTitleBorder: useUpdatedUx }}
+          panelStyles={{ padding: useUpdatedUx && totalMonitors < 1 ? '16px 16px 0px' : '16px' }}
+        >
+          <MonitorControls
+            activePage={page}
+            pageCount={Math.ceil(totalMonitors / size) || 1}
+            search={search}
+            state={monitorState}
+            onSearchChange={this.onSearchChange}
+            onStateChange={this.onMonitorStateChange}
+            onPageClick={this.onPageClick}
+            monitorActions={useUpdatedUx ? monitorActions : null}
+          />
 
-        {showAcknowledgeModal && (
-          <AcknowledgeModal
-            alerts={alerts}
-            totalAlerts={totalAlerts}
-            onAcknowledge={this.onClickAcknowledgeModal}
-            onClickCancel={this.onClickCancel}
+          {showAcknowledgeModal && (
+            <AcknowledgeModal
+              alerts={alerts}
+              totalAlerts={totalAlerts}
+              onAcknowledge={this.onClickAcknowledgeModal}
+              onClickCancel={this.onClickCancel}
+            />
+          )}
+
+          <div style={{ padding: useUpdatedUx ? '0px 16px 16px 16px' : '0px' }}>
+            <EuiBasicTable
+              columns={this.buildColumns()}
+              hasActions={true}
+              isSelectable={true}
+              /*
+               * EUI doesn't let you manually control the selectedItems, so we have to use the itemId for now
+               * If using monitor ID, doesn't correctly update selectedItems when doing certain bulk actions, because the ID is the same
+               * If using monitor ID + monitor version, it works for everything except Acknowledge, because Acknowledge isn't updating the monitor document
+               * So the best approach for now is to set a currentTime on API response for the table to use as part of itemId,
+               * and whenever new monitors are fetched from the server, we should be deselecting all monitors
+               * */
+              itemId={this.getItemId}
+              items={monitors}
+              noItemsMessage={
+                <MonitorEmptyPrompt
+                  filterIsApplied={filterIsApplied}
+                  loading={loadingMonitors}
+                  resetFilters={this.resetFilters}
+                />
+              }
+              onChange={this.onTableChange}
+              pagination={pagination}
+              selection={selection}
+              sorting={sorting}
+            />
+          </div>
+        </ContentPanel>
+        {monitorItemsToDelete && (
+          <DeleteMonitorModal
+            monitors={monitorItemsToDelete}
+            httpClient={this.props.httpClient}
+            closeDeleteModal={() => this.setState({ monitorItemsToDelete: undefined })}
+            onClickDelete={() => this.deleteMonitors(this.state.monitorItemsToDelete)}
           />
         )}
-
-        <EuiBasicTable
-          columns={this.columns}
-          hasActions={true}
-          isSelectable={true}
-          /*
-           * EUI doesn't let you manually control the selectedItems, so we have to use the itemId for now
-           * If using monitor ID, doesn't correctly update selectedItems when doing certain bulk actions, because the ID is the same
-           * If using monitor ID + monitor version, it works for everything except Acknowledge, because Acknowledge isn't updating the monitor document
-           * So the best approach for now is to set a currentTime on API response for the table to use as part of itemId,
-           * and whenever new monitors are fetched from the server, we should be deselecting all monitors
-           * */
-          itemId={this.getItemId}
-          items={monitors}
-          noItemsMessage={
-            <MonitorEmptyPrompt
-              filterIsApplied={filterIsApplied}
-              loading={loadingMonitors}
-              resetFilters={this.resetFilters}
-            />
-          }
-          onChange={this.onTableChange}
-          pagination={pagination}
-          selection={selection}
-          sorting={sorting}
-        />
-      </ContentPanel>
+      </>
     );
   }
 }

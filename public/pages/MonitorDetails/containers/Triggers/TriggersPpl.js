@@ -1,0 +1,190 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { Component } from 'react';
+import PropTypes from 'prop-types';
+import { EuiInMemoryTable, EuiIcon, EuiToolTip } from '@elastic/eui';
+import _ from 'lodash';
+
+import ContentPanel from '../../../../components/ContentPanel';
+import { DEFAULT_EMPTY_DATA } from '../../../../utils/constants';
+
+const formatTriggerType = (type) => {
+  if (!type) return DEFAULT_EMPTY_DATA;
+  switch (type) {
+    case 'number_of_results':
+      return 'Number of results';
+    case 'custom_script':
+    case 'script':
+      return 'Custom';
+    default:
+      return type;
+  }
+};
+
+const formatMinutes = (value) =>
+  value === 0
+    ? '0 minutes'
+    : value
+    ? `${value} minute${value === 1 ? '' : 's'}`
+    : DEFAULT_EMPTY_DATA;
+
+const getExpireDurationHeader = () => {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+      Expire duration
+      <EuiToolTip content="Default to 7 days if not specified">
+        <EuiIcon type="iInCircle" size="s" style={{ marginLeft: '4px' }} />
+      </EuiToolTip>
+    </span>
+  );
+};
+
+const normalizeTrigger = (trigger = {}) => ({
+  ...trigger,
+  id: trigger.id ?? trigger.name ?? `${trigger.type || 'trigger'}-${Math.random()}`,
+});
+
+class TriggersPpl extends Component {
+  constructor(props) {
+    super(props);
+
+    this.state = {
+      field: 'name',
+      tableKey: `table-${Date.now()}-${Math.random()}`,
+      direction: 'asc',
+      selectedItems: [],
+      items: [],
+    };
+
+    this.onSelectionChange = this.onSelectionChange.bind(this);
+    this.onTableChange = this.onTableChange.bind(this);
+  }
+
+  componentDidMount() {
+    this.updateMonitorState();
+  }
+
+  componentDidUpdate(prevProps) {
+    if (this.props.monitor !== prevProps.monitor) {
+      this.updateMonitorState();
+    }
+  }
+
+  componentWillReceiveProps(nextProps) {
+    if (this.props.monitor !== nextProps.monitor) {
+      this.setState({ tableKey: `table-${Date.now()}-${Math.random()}` });
+    }
+  }
+
+  updateMonitorState() {
+    const { monitor } = this.props;
+
+    const rawTriggers = Array.isArray(monitor?.triggers) ? monitor.triggers : [];
+    const triggers = rawTriggers.map((trigger) => {
+      const unwrapped = trigger.ppl_trigger ? trigger.ppl_trigger : trigger;
+      return normalizeTrigger(unwrapped);
+    });
+
+    this.setState({ items: triggers });
+  }
+
+  onSelectionChange(selectedItems) {
+    this.setState({ selectedItems });
+  }
+
+  onTableChange({ sort: { field, direction } = {} }) {
+    this.setState({ field, direction });
+  }
+
+  render() {
+    const { direction, field, tableKey, items } = this.state;
+    const { monitor } = this.props;
+    const numOfTriggers = Array.isArray(monitor?.triggers) ? monitor.triggers.length : 0;
+
+    const columns = [
+      {
+        field: 'name',
+        name: 'Name',
+        sortable: true,
+        truncateText: true,
+        width: '15%',
+      },
+      {
+        field: 'type',
+        name: 'Trigger type',
+        sortable: false,
+        truncateText: false,
+        width: '12%',
+        render: (type) => formatTriggerType(type),
+      },
+      {
+        field: 'actions',
+        name: 'Number of actions',
+        sortable: true,
+        truncateText: false,
+        render: (actions = []) => actions.length,
+        width: '12%',
+      },
+      {
+        field: 'severity',
+        name: 'Severity',
+        sortable: true,
+        truncateText: false,
+        width: '10%',
+      },
+      {
+        field: 'num_results_condition',
+        name: 'Num results condition',
+        sortable: false,
+        truncateText: false,
+        width: '12%',
+        render: (value) => (_.isEmpty(value) ? DEFAULT_EMPTY_DATA : value),
+      },
+      {
+        field: 'num_results_value',
+        name: 'Num results value',
+        sortable: false,
+        truncateText: false,
+        width: '12%',
+        render: (value) => (_.isNil(value) ? DEFAULT_EMPTY_DATA : value),
+      },
+      {
+        field: 'custom_condition',
+        name: 'Custom condition',
+        sortable: false,
+        truncateText: false,
+        width: '20%',
+        render: (value) => (_.isEmpty(value) ? DEFAULT_EMPTY_DATA : value),
+      },
+    ];
+
+    const sorting = { sort: { field, direction } };
+
+    return (
+      <ContentPanel
+        title={`Triggers (${numOfTriggers})`}
+        titleSize="s"
+        bodyStyles={{ padding: 'initial' }}
+      >
+        <EuiInMemoryTable
+          items={items}
+          itemId="id"
+          key={tableKey}
+          columns={columns}
+          sorting={sorting}
+          onTableChange={this.onTableChange}
+          noItemsMessage={'There are no triggers.'}
+        />
+      </ContentPanel>
+    );
+  }
+}
+
+TriggersPpl.propTypes = {
+  monitor: PropTypes.object.isRequired,
+};
+
+export default TriggersPpl;

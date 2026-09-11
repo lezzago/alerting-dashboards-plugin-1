@@ -7,10 +7,15 @@ import React from 'react';
 import { Formik } from 'formik';
 import { mount } from 'enzyme';
 
+import {
+  notificationServiceMock,
+  httpServiceMock,
+} from '../../../../../../../../src/core/public/mocks';
 import { FORMIK_INITIAL_VALUES } from '../../CreateMonitor/utils/constants';
 import AnomalyDetectors from '../AnomalyDetectors';
 import { httpClientMock } from '../../../../../../test/mocks';
 import { CoreContext } from '../../../../../utils/CoreContext';
+import { setClient, setNotifications } from '../../../../../services';
 
 // Used to wait until all of the promises have cleared, especially waiting for asynchronous Formik's handlers.
 const runAllPromises = () => new Promise(setImmediate);
@@ -29,6 +34,10 @@ function getMountWrapper() {
 }
 
 describe('AnomalyDetectors', () => {
+  const notifications = notificationServiceMock.createStartContract();
+  setNotifications(notifications);
+  const httpClient = httpServiceMock.createStartContract();
+  setClient(httpClient);
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -36,6 +45,38 @@ describe('AnomalyDetectors', () => {
     httpClientMock.post.mockResolvedValue({ ok: true, detectors: [] });
     const wrapper = getMountWrapper();
     expect(wrapper).toMatchSnapshot();
+  });
+
+  test('refetches detectors when landingDataSourceId changes', async () => {
+    httpClient.post.mockResolvedValue({ ok: true, detectors: [] });
+    const TestHarness = ({ landingDataSourceId }) => (
+      <CoreContext.Provider value={{ http: httpClientMock }}>
+        <Formik initialValues={FORMIK_INITIAL_VALUES}>
+          {({ values }) => (
+            <AnomalyDetectors
+              values={values}
+              renderEmptyMessage={renderEmptyMessage}
+              landingDataSourceId={landingDataSourceId}
+            />
+          )}
+        </Formik>
+      </CoreContext.Provider>
+    );
+
+    const wrapper = mount(<TestHarness landingDataSourceId={undefined} />);
+
+    await runAllPromises();
+    wrapper.update();
+
+    // Change the data source id and ensure we re-fetch with the new query param.
+    wrapper.setProps({ landingDataSourceId: 'demo' });
+
+    await runAllPromises();
+    wrapper.update();
+
+    const lastCallArgs = httpClient.post.mock.calls[httpClient.post.mock.calls.length - 1];
+    expect(lastCallArgs[0]).toEqual('../api/alerting/detectors/_search');
+    expect(lastCallArgs[1]).toMatchObject({ query: { dataSourceId: 'demo' } });
   });
 
   test('should be able to select the detector', async () => {
@@ -65,7 +106,7 @@ describe('AnomalyDetectors', () => {
 
     // Validate the specific detector is in the input field
     expect(wrapper.find('[data-test-subj="comboBoxInput"]').hostNodes().text()).toEqual(
-      'sample-detector'
+      'sample-detect'
     );
   });
 });

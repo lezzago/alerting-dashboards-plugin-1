@@ -1,9 +1,9 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`MonitorOverview renders 1`] = `
 <div
-  class="euiPanel euiPanel--paddingMedium"
-  style="padding-left:0px;padding-right:0px"
+  class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusMedium euiPanel--plain euiPanel--hasShadow"
+  style="padding:16px"
 >
   <div
     class="euiFlexGroup euiFlexGroup--gutterLarge euiFlexGroup--alignItemsCenter euiFlexGroup--justifyContentSpaceBetween euiFlexGroup--directionRow euiFlexGroup--responsive"
@@ -12,11 +12,13 @@ exports[`MonitorOverview renders 1`] = `
     <div
       class="euiFlexItem"
     >
-      <h3
-        class="euiTitle euiTitle--small"
+      <div
+        class="euiText euiText--small"
       >
-        Overview
-      </h3>
+        <h2>
+          Overview
+        </h2>
+      </div>
     </div>
     <div
       class="euiFlexItem euiFlexItem--flexGrowZero"
@@ -56,7 +58,9 @@ exports[`MonitorOverview renders 1`] = `
           <strong>
             Monitor type
           </strong>
-          <div>
+          <div
+            style="word-wrap:break-word;overflow-wrap:break-word"
+          >
             Per query monitor
           </div>
         </div>
@@ -70,8 +74,26 @@ exports[`MonitorOverview renders 1`] = `
           <strong>
             Monitor definition type
           </strong>
-          <div>
+          <div
+            style="word-wrap:break-word;overflow-wrap:break-word"
+          >
             Extraction Query
+          </div>
+        </div>
+      </div>
+      <div
+        class="euiFlexItem"
+      >
+        <div
+          class="euiText euiText--extraSmall"
+        >
+          <strong>
+            Index
+          </strong>
+          <div
+            style="word-wrap:break-word;overflow-wrap:break-word"
+          >
+            -
           </div>
         </div>
       </div>
@@ -84,7 +106,9 @@ exports[`MonitorOverview renders 1`] = `
           <strong>
             Total active alerts
           </strong>
-          <div>
+          <div
+            style="word-wrap:break-word;overflow-wrap:break-word"
+          >
             17
           </div>
         </div>
@@ -98,7 +122,9 @@ exports[`MonitorOverview renders 1`] = `
           <strong>
             Schedule
           </strong>
-          <div>
+          <div
+            style="word-wrap:break-word;overflow-wrap:break-word"
+          >
             -
           </div>
         </div>
@@ -112,7 +138,9 @@ exports[`MonitorOverview renders 1`] = `
           <strong>
             Last updated
           </strong>
-          <div>
+          <div
+            style="word-wrap:break-word;overflow-wrap:break-word"
+          >
             -
           </div>
         </div>
@@ -126,7 +154,9 @@ exports[`MonitorOverview renders 1`] = `
           <strong>
             Monitor ID
           </strong>
-          <div />
+          <div
+            style="word-wrap:break-word;overflow-wrap:break-word"
+          />
         </div>
       </div>
       <div
@@ -138,22 +168,10 @@ exports[`MonitorOverview renders 1`] = `
           <strong>
             Monitor version number
           </strong>
-          <div>
+          <div
+            style="word-wrap:break-word;overflow-wrap:break-word"
+          >
             3
-          </div>
-        </div>
-      </div>
-      <div
-        class="euiFlexItem"
-      >
-        <div
-          class="euiText euiText--extraSmall"
-        >
-          <strong>
-            Last updated by
-          </strong>
-          <div>
-            -
           </div>
         </div>
       </div>

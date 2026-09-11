@@ -1,21 +1,21 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`DashboardControls renders 1`] = `
 <div
-  class="euiFlexGroup euiFlexGroup--gutterLarge euiFlexGroup--directionRow euiFlexGroup--responsive"
-  style="padding:0px 5px"
+  class="euiFlexGroup euiFlexGroup--gutterSmall euiFlexGroup--directionRow euiFlexGroup--responsive"
+  style="padding:0px 0px 16px"
 >
   <div
     class="euiFlexItem"
   >
     <div
-      class="euiFormControlLayout euiFormControlLayout--fullWidth"
+      class="euiFormControlLayout euiFormControlLayout--fullWidth euiFormControlLayout--compressed"
     >
       <div
         class="euiFormControlLayout__childrenWrapper"
       >
         <input
-          class="euiFieldSearch euiFieldSearch--fullWidth euiFieldSearch-isClearable"
+          class="euiFieldSearch euiFieldSearch--fullWidth euiFieldSearch--compressed"
           placeholder="Search"
           type="search"
           value=""
@@ -38,13 +38,13 @@ exports[`DashboardControls renders 1`] = `
     class="euiFlexItem euiFlexItem--flexGrowZero"
   >
     <div
-      class="euiFormControlLayout"
+      class="euiFormControlLayout euiFormControlLayout--compressed"
     >
       <div
         class="euiFormControlLayout__childrenWrapper"
       >
         <select
-          class="euiSelect"
+          class="euiSelect euiSelect--compressed"
         >
           <option
             selected=""
@@ -96,13 +96,13 @@ exports[`DashboardControls renders 1`] = `
     class="euiFlexItem euiFlexItem--flexGrowZero"
   >
     <div
-      class="euiFormControlLayout"
+      class="euiFormControlLayout euiFormControlLayout--compressed"
     >
       <div
         class="euiFormControlLayout__childrenWrapper"
       >
         <select
-          class="euiSelect"
+          class="euiSelect euiSelect--compressed"
           data-test-subj="dashboardAlertStateFilter"
         >
           <option
@@ -150,82 +150,6 @@ exports[`DashboardControls renders 1`] = `
         </div>
       </div>
     </div>
-  </div>
-  <div
-    class="euiFlexItem euiFlexItem--flexGrowZero"
-    style="justify-content:center"
-  >
-    <nav
-      class="euiPagination"
-    >
-      <button
-        aria-label="Previous page, 1"
-        class="euiButtonIcon euiButtonIcon--text"
-        data-test-subj="pagination-button-previous"
-        type="button"
-      >
-        <div>
-          EuiIconMock
-        </div>
-      </button>
-      <ul
-        class="euiPagination__list"
-      >
-        <li
-          class="euiPagination__item"
-        >
-          <button
-            aria-label="Page 1 of 2"
-            class="euiButtonEmpty euiButtonEmpty--text euiButtonEmpty--xSmall euiPaginationButton euiPaginationButton--hideOnMobile"
-            data-test-subj="pagination-button-0"
-            type="button"
-          >
-            <span
-              class="euiButtonContent euiButtonEmpty__content"
-            >
-              <span
-                class="euiButtonEmpty__text"
-              >
-                1
-              </span>
-            </span>
-          </button>
-        </li>
-        <li
-          class="euiPagination__item"
-        >
-          <button
-            aria-current="true"
-            aria-label="Page 2 of 2"
-            class="euiButtonEmpty euiButtonEmpty--text euiButtonEmpty--xSmall euiButtonEmpty-isDisabled euiPaginationButton euiPaginationButton-isActive euiPaginationButton--hideOnMobile"
-            data-test-subj="pagination-button-1"
-            disabled=""
-            type="button"
-          >
-            <span
-              class="euiButtonContent euiButtonEmpty__content"
-            >
-              <span
-                class="euiButtonEmpty__text"
-              >
-                2
-              </span>
-            </span>
-          </button>
-        </li>
-      </ul>
-      <button
-        aria-label="Next page"
-        class="euiButtonIcon euiButtonIcon--text"
-        data-test-subj="pagination-button-next"
-        disabled=""
-        type="button"
-      >
-        <div>
-          EuiIconMock
-        </div>
-      </button>
-    </nav>
   </div>
 </div>
 `;

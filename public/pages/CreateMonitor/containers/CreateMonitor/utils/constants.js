@@ -3,13 +3,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { OPERATORS_MAP } from '../../../components/MonitorExpressions/expressions/utils/constants';
+import {
+  WHERE_FILTER_ALLOWED_TYPES,
+  OPERATORS_MAP,
+} from '../../../components/MonitorExpressions/expressions/utils/constants';
 import { MONITOR_TYPE } from '../../../../../utils/constants';
-import { QUERY_OPERATORS } from '../../../../Dashboard/components/FindingsDashboard/utils';
+import { SUPPORTED_DOC_LEVEL_QUERY_OPERATORS } from '../../../components/DocumentLevelMonitorQueries/utils/constants';
+import { dataSourceEnabled } from '../../../../utils/helpers';
 
 export const BUCKET_COUNT = 5;
 
 export const MATCH_ALL_QUERY = JSON.stringify({ size: 0, query: { match_all: {} } }, null, 4);
+
+export const FORMIK_INITIAL_WHERE_EXPRESSION_VALUES = {
+  fieldName: [{ label: '', type: WHERE_FILTER_ALLOWED_TYPES[0] }], // This is an array because the EuiCombobox returns an array of {label: string, type: string} objects.
+  operator: OPERATORS_MAP.IS.value,
+  fieldValue: '',
+  fieldRangeStart: undefined,
+  fieldRangeEnd: undefined,
+};
+
+/** Sample delegate
+ *  {
+      order: 1,
+      monitor_id: '{{m1}}',
+    }
+ */
+export const DEFAULT_ASSOCIATED_MONITORS_VALUE = {
+  sequence: {
+    delegates: [],
+  },
+};
 
 export const FORMIK_INITIAL_VALUES = {
   /* CONFIGURE MONITOR */
@@ -26,8 +50,13 @@ export const FORMIK_INITIAL_VALUES = {
   /* DEFINE MONITOR */
   monitor_type: MONITOR_TYPE.QUERY_LEVEL,
   searchType: 'graph',
+  pplQuery: '',
+  pplPreviewResult: null,
+  pplPreviewError: null,
+  clusterNames: [],
   uri: {
     api_type: '',
+    clusters: [],
     path: '',
     path_params: '',
     url: '',
@@ -47,15 +76,22 @@ export const FORMIK_INITIAL_VALUES = {
   groupedOverFieldName: 'bytes',
   bucketValue: 1,
   bucketUnitOfTime: 'h', // m = minute, h = hour, d = day
-  where: {
-    fieldName: [],
-    operator: OPERATORS_MAP.IS,
-    fieldValue: '',
-    fieldRangeStart: 0,
-    fieldRangeEnd: 0,
-  },
+  filters: [], // array of FORMIK_INITIAL_WHERE_EXPRESSION_VALUES
   detectorId: '',
+  associatedMonitors: DEFAULT_ASSOCIATED_MONITORS_VALUE,
+  associatedMonitorsList: [],
+  associatedMonitorsEditor: '',
+  preventVisualEditor: false,
+  timestampField: '',
+  useLookBackWindow: false,
+  lookBackAmount: 1,
+  lookBackUnit: 'hours',
+  monitor_mode: 'ppl',
 };
+
+if (dataSourceEnabled()) {
+  FORMIK_INITIAL_VALUES['dataSourceId'] = 'random-dataSourceId';
+}
 
 export const FORMIK_INITIAL_AGG_VALUES = {
   aggregationType: 'count',
@@ -66,7 +102,7 @@ export const FORMIK_INITIAL_DOCUMENT_LEVEL_QUERY_VALUES = {
   id: undefined,
   queryName: '',
   field: '',
-  operator: QUERY_OPERATORS[0].value,
+  operator: SUPPORTED_DOC_LEVEL_QUERY_OPERATORS[0],
   query: '',
   tags: [],
 };
@@ -88,6 +124,11 @@ export const DEFAULT_DOCUMENT_LEVEL_QUERY = JSON.stringify(
 );
 
 export const DEFAULT_COMPOSITE_AGG_SIZE = 50;
+
+export const MONITOR_NAME_MAX_LENGTH = 256;
+export const MONITOR_DESCRIPTION_MAX_LENGTH = 500;
+export const LOOKBACK_WINDOW_MIN_MINUTES = 1;
+export const LOOKBACK_WINDOW_MAX_MINUTES = 10080; // 7 days
 
 export const METRIC_TOOLTIP_TEXT = 'Extracted statistics such as simple calculations of data.';
 export const TIME_RANGE_TOOLTIP_TEXT = 'The time frame of data the plugin should monitor.';

@@ -5,7 +5,7 @@
 
 import React, { Component } from 'react';
 import {
-  EuiButton,
+  EuiSmallButton,
   EuiContextMenuItem,
   EuiContextMenuPanel,
   EuiFlexGroup,
@@ -14,7 +14,6 @@ import {
 } from '@elastic/eui';
 
 import { APP_PATH } from '../../../../utils/constants';
-import { PLUGIN_NAME } from '../../../../../utils/constants';
 
 export default class MonitorActions extends Component {
   state = {
@@ -22,9 +21,13 @@ export default class MonitorActions extends Component {
   };
 
   getActions = () => {
-    // TODO: Support bulk acknowledge alerts across multiple monitors after figuring out the correct parameter for getAlerts API.
-    // Disabling the acknowledge button for now when more than 1 monitors selected.
-    const { isEditDisabled } = this.props;
+    const {
+      isEditDisabled,
+      isDeleteDisabled,
+      isEnableDisabled,
+      isDisableDisabled,
+      hasMonitors = true,
+    } = this.props;
     const actions = [
       <EuiContextMenuItem
         key="acknowledge"
@@ -36,6 +39,20 @@ export default class MonitorActions extends Component {
       >
         Acknowledge
       </EuiContextMenuItem>,
+    ];
+
+    actions.push(
+      <EuiContextMenuItem
+        key="edit"
+        data-test-subj="editItem"
+        onClick={() => {
+          this.onCloseActions();
+          this.props.onClickEdit();
+        }}
+        disabled={isEditDisabled}
+      >
+        Edit
+      </EuiContextMenuItem>,
       <EuiContextMenuItem
         key="enable"
         data-test-subj="enableItem"
@@ -43,6 +60,7 @@ export default class MonitorActions extends Component {
           this.onCloseActions();
           this.props.onBulkEnable();
         }}
+        disabled={isEnableDisabled}
       >
         Enable
       </EuiContextMenuItem>,
@@ -53,6 +71,7 @@ export default class MonitorActions extends Component {
           this.onCloseActions();
           this.props.onBulkDisable();
         }}
+        disabled={isDisableDisabled}
       >
         Disable
       </EuiContextMenuItem>,
@@ -63,11 +82,12 @@ export default class MonitorActions extends Component {
           this.onCloseActions();
           this.props.onBulkDelete();
         }}
+        disabled={isDeleteDisabled}
       >
         Delete
-      </EuiContextMenuItem>,
-    ];
-    if (isEditDisabled) actions.splice(0, 1);
+      </EuiContextMenuItem>
+    );
+
     return actions;
   };
 
@@ -81,44 +101,43 @@ export default class MonitorActions extends Component {
 
   render() {
     const { isActionsOpen } = this.state;
-    const { isEditDisabled, onClickEdit } = this.props;
+    const createMonitorControl = (
+      <EuiSmallButton
+        fill
+        href={`#${APP_PATH.CREATE_MONITOR}`}
+        data-test-subj="createButton"
+        iconType="plus"
+        iconSide="left"
+        iconGap="s"
+      >
+        Create monitor
+      </EuiSmallButton>
+    );
+
     return (
-      <EuiFlexGroup justifyContent="spaceBetween" alignItems="center">
+      <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
         <EuiFlexItem grow={false}>
           <EuiPopover
             id="actionsPopover"
             button={
-              <EuiButton
+              <EuiSmallButton
                 onClick={this.onClickActions}
                 iconType="arrowDown"
                 iconSide="right"
                 data-test-subj="actionsButton"
               >
                 Actions
-              </EuiButton>
+              </EuiSmallButton>
             }
             isOpen={isActionsOpen}
             closePopover={this.onCloseActions}
             panelPaddingSize="none"
             anchorPosition="downLeft"
           >
-            <EuiContextMenuPanel items={this.getActions()} />
+            <EuiContextMenuPanel items={this.getActions()} size="s" />
           </EuiPopover>
         </EuiFlexItem>
-        <EuiFlexItem grow={false}>
-          <EuiButton disabled={isEditDisabled} onClick={onClickEdit} data-test-subj="editButton">
-            Edit
-          </EuiButton>
-        </EuiFlexItem>
-        <EuiFlexItem grow={false}>
-          <EuiButton
-            fill
-            href={`${PLUGIN_NAME}#${APP_PATH.CREATE_MONITOR}`}
-            data-test-subj="createButton"
-          >
-            Create monitor
-          </EuiButton>
-        </EuiFlexItem>
+        <EuiFlexItem grow={false}>{createMonitorControl}</EuiFlexItem>
       </EuiFlexGroup>
     );
   }

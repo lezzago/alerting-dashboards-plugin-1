@@ -4,8 +4,27 @@
  */
 
 import React from 'react';
-import { EuiText } from '@elastic/eui';
+import { EuiText, EuiTitle } from '@elastic/eui';
 import { htmlIdGenerator } from '@elastic/eui/lib/services';
+import {
+  displayAcknowledgedAlertsToast,
+  filterActiveAlerts,
+} from '../pages/Dashboard/utils/helpers';
+import _ from 'lodash';
+import { getDataSourceQueryObj, getDataSourceId } from '../pages/utils/helpers';
+import {
+  getContentManagementStart,
+  getDataSourceManagementPlugin,
+  getUseUpdatedUx,
+  isServerlessEnabled,
+  getClient,
+  OS_SERVERLESS_ENGINE_TYPE,
+} from '../services';
+import * as pluginManifest from '../../opensearch_dashboards.json';
+import semver from 'semver';
+import { SEVERITY_OPTIONS } from './constants';
+import { ANALYTICS_ALL_OVERVIEW_CONTENT_AREAS } from '../../../../src/plugins/content_management/public';
+import { DataSourceAlertsCard } from '../components/DataSourceAlertsCard/DataSourceAlertsCard';
 
 export const makeId = htmlIdGenerator();
 
@@ -23,6 +42,77 @@ export const backendErrorNotification = (notifications, actionName, objectName, 
     text: errorMessage,
     toastLifeTimeMs: 20000, // the default lifetime for toasts is 10 sec
   });
+};
+
+// Fields that must not be echoed back when round-tripping a monitor through
+// GET -> PUT (server-managed / response-only fields).
+const MONITOR_UPDATE_OMIT_FIELDS = [
+  'id',
+  '_id',
+  'item_type',
+  'currentTime',
+  'version',
+  '_version',
+  'ifSeqNo',
+  'ifPrimaryTerm',
+];
+
+/**
+ * Fetches the full monitor body and writes it back with `update` applied —
+ * the safe way to toggle fields (e.g. enabled) for ALL monitor types,
+ * since the untouched body round-trips verbatim. Shared by the Monitors
+ * page actions and the Alerts page disable action so the omit list and
+ * concurrency handling cannot drift apart.
+ * Surfaces failures (including thrown/network errors) via
+ * backendErrorNotification and always resolves (never rejects).
+ */
+export const fetchAndUpdateMonitor = async (
+  httpClient,
+  notifications,
+  monitorId,
+  update,
+  dataSourceQuery,
+  fallbacks = {}
+) => {
+  try {
+    const detailResp = await httpClient.get(
+      `../api/alerting/monitors/${monitorId}`,
+      dataSourceQuery
+    );
+    if (!detailResp?.ok) {
+      backendErrorNotification(notifications, 'get', 'monitor', detailResp?.resp);
+      return detailResp;
+    }
+
+    const monitorDetail = detailResp.resp || {};
+    const ifSeqNo = detailResp.ifSeqNo ?? fallbacks.ifSeqNo;
+    const ifPrimaryTerm = detailResp.ifPrimaryTerm ?? fallbacks.ifPrimaryTerm;
+    const dataSourceId = dataSourceQuery?.query?.dataSourceId;
+
+    const query = {};
+    if (ifSeqNo !== undefined) query.ifSeqNo = ifSeqNo;
+    if (ifPrimaryTerm !== undefined) query.ifPrimaryTerm = ifPrimaryTerm;
+    if (dataSourceId !== undefined) query.dataSourceId = dataSourceId;
+
+    const payload = _.omit({ ...monitorDetail, ...update }, MONITOR_UPDATE_OMIT_FIELDS);
+
+    const resp = await httpClient.put(`../api/alerting/monitors/${monitorId}`, {
+      query,
+      body: JSON.stringify(payload),
+    });
+    if (!resp?.ok) {
+      backendErrorNotification(notifications, 'update', 'monitor', resp?.resp);
+    }
+    return resp;
+  } catch (err) {
+    backendErrorNotification(
+      notifications,
+      'update',
+      'monitor',
+      err?.body?.message || err?.message || String(err)
+    );
+    return { ok: false, resp: err };
+  }
 };
 
 // A helper function to generate a simple string explaining how many elements a user can add to a list.
@@ -46,3 +136,227 @@ export const inputLimitText = (
     </EuiText>
   );
 };
+
+export async function deleteMonitor(monitor, httpClient, notifications, dataSourceQuery) {
+  const { id, version } = monitor;
+  const poolType = monitor.item_type === 'composite' ? 'workflows' : 'monitors';
+
+  return httpClient
+    .delete(`../api/alerting/${poolType}/${id}`, { query: { version, ...dataSourceQuery?.query } })
+    .then((resp) => {
+      if (!resp.ok) {
+        backendErrorNotification(notifications, 'delete', 'monitor', resp.resp);
+      } else {
+        notifications.toasts.addSuccess(`Monitor deleted successfully.`);
+      }
+      return resp;
+    })
+    .catch((err) => err);
+}
+
+export const getDigitId = (length = 6) =>
+  Math.floor(Date.now() * Math.random())
+    .toString()
+    .slice(-length);
+
+// Assumes that values is an array of objects with "name" inside
+export const getUniqueName = (values, prefix) => {
+  const lastValue = _.last(values);
+  const lastName = lastValue ? lastValue.name : '';
+  const lastDigit = Number.parseInt(lastName.match(/\d+$/)?.[0] || 0, 10);
+
+  // Checks if value is already in use
+  const getUniqueName = (digit) => {
+    const name = `${prefix}${digit + 1}`;
+    const duplicate = values.find((value) => value.name === name);
+    return duplicate ? getUniqueName(digit + 1) : name;
+  };
+
+  return getUniqueName(lastDigit);
+};
+
+export async function acknowledgeAlerts(httpClient, notifications, alerts) {
+  const selectedAlerts = filterActiveAlerts(alerts);
+
+  const monitorAlerts = selectedAlerts.reduce((monitorAlerts, alert) => {
+    const id = alert.id;
+    const monitorId = alert.workflow_id || alert.monitor_id;
+    if (monitorAlerts[monitorId]) monitorAlerts[monitorId].alerts.push(id);
+    else
+      monitorAlerts[monitorId] = {
+        alerts: [id],
+        poolType: !!alert.workflow_id ? 'workflows' : 'monitors',
+      };
+    return monitorAlerts;
+  }, {});
+
+  const dataSourceQuery = getDataSourceQueryObj();
+  const acknowledgePromises = Object.entries(monitorAlerts).map(
+    ([monitorId, { alerts, poolType }]) =>
+      httpClient
+        .post(`../api/alerting/${poolType}/${monitorId}/_acknowledge/alerts`, {
+          body: JSON.stringify({ alerts }),
+          query: dataSourceQuery?.query,
+        })
+        .then((resp) => {
+          if (!resp.ok) {
+            backendErrorNotification(notifications, 'acknowledge', 'alert', resp.resp);
+          } else {
+            const successfulCount = _.get(resp, 'resp.success', []).length;
+            displayAcknowledgedAlertsToast(notifications, successfulCount);
+          }
+        })
+        .catch((error) => error)
+  );
+
+  return acknowledgePromises;
+}
+
+export const titleTemplate = (title, subTitle) => (
+  <>
+    <EuiTitle size="xs">
+      <h4>{title}</h4>
+    </EuiTitle>
+    {subTitle && (
+      <EuiText color={'subdued'} size={'xs'}>
+        <p>{subTitle}</p>
+      </EuiText>
+    )}
+  </>
+);
+
+// This is updated to include the server.basepath during plugin's first render inside app.js using `initManageChannelsUrl` function
+export let MANAGE_CHANNELS_URL = undefined;
+// export const manageChannelsRelativePath = `/app/notifications-dashboards#/channels`;
+
+export function initManageChannelsUrl(httpClient) {
+  if (!MANAGE_CHANNELS_URL) {
+    const relativePath = `/app/${
+      getUseUpdatedUx() ? 'channels' : 'notifications-dashboards'
+    }#/channels`;
+    MANAGE_CHANNELS_URL = httpClient.basePath.prepend(relativePath, {
+      withoutClientBasePath: true,
+    });
+  }
+}
+
+export function getManageChannelsUrl() {
+  const relativePath = `/app/${
+    getUseUpdatedUx() ? 'channels' : 'notifications-dashboards'
+  }#/channels`;
+
+  // TODO: The `isServerlessEnabled` feature flag is currently gating the UI changes that moves the
+  //  notification plugin UI from app level to workspace level.
+  //  Remove the feature flag check when these changes are GA released.
+  if (isServerlessEnabled()) {
+    const httpClient = getClient();
+    let url = httpClient?.basePath?.prepend(relativePath) || relativePath;
+    try {
+      const dataSourceId = getDataSourceId();
+      if (dataSourceId) {
+        url += `${url.includes('?') ? '&' : '?'}dataSourceId=${dataSourceId}`;
+      }
+    } catch (e) {
+      /* DataSource not set yet */
+    }
+    return url;
+  }
+  return MANAGE_CHANNELS_URL || relativePath;
+}
+
+const mustangCache = new Map();
+
+/**
+ * Returns whether a data source is a mustang domain from the prefetched cache.
+ */
+export function isMustangDomain(dataSourceId) {
+  return mustangCache.get(dataSourceId) || false;
+}
+
+/**
+ * Pre-fetches cluster settings for non-serverless data sources to determine
+ * which are mustang domains. Must be called before dataSourceFilterFn is used.
+ */
+export async function prefetchMustangStatus(httpClient, dataSources) {
+  const nonServerless = dataSources.filter(
+    (ds) => ds.attributes?.dataSourceEngineType !== OS_SERVERLESS_ENGINE_TYPE
+  );
+  await Promise.all(
+    nonServerless.map(async (ds) => {
+      if (mustangCache.has(ds.id)) return;
+      try {
+        const resp = await httpClient.get('../api/alerting/_settings', {
+          query: { dataSourceId: ds.id },
+        });
+        if (resp.ok) {
+          const { defaults, transient, persistent } = resp.resp;
+          const value =
+            transient?.cluster?.pluggable?.['dataformat.enabled'] ??
+            persistent?.cluster?.pluggable?.['dataformat.enabled'] ??
+            defaults?.cluster?.pluggable?.['dataformat.enabled'];
+          mustangCache.set(ds.id, value === 'true' || value === true);
+        } else {
+          mustangCache.set(ds.id, false);
+        }
+      } catch (e) {
+        mustangCache.set(ds.id, false);
+      }
+    })
+  );
+}
+
+export function dataSourceFilterFn(dataSource) {
+  const dataSourceVersion = dataSource?.attributes?.dataSourceVersion || '';
+  const installedPlugins = dataSource?.attributes?.installedPlugins || [];
+
+  // Allow serverless collections when oasis routing is available.
+  // Serverless collections do not have a concept of having the backend plugin installed, so the `installedPlugins.includes` check isn't needed.
+  const engineType = dataSource?.attributes?.dataSourceEngineType || '';
+  if (engineType === OS_SERVERLESS_ENGINE_TYPE && isServerlessEnabled()) {
+    return true;
+  }
+
+  // Allow mustang domains (cluster.pluggable.dataformat.enabled === true)
+  if (mustangCache.get(dataSource.id)) {
+    return true;
+  }
+
+  return (
+    semver.satisfies(dataSourceVersion, pluginManifest.supportedOSDataSourceVersions) &&
+    pluginManifest.requiredOSDataSourcePlugins.every((plugin) => installedPlugins.includes(plugin))
+  );
+}
+
+export function getSeverityText(severity) {
+  return _.get(_.find(SEVERITY_OPTIONS, { value: severity }), 'text');
+}
+
+export function getSeverityBadgeText(severity) {
+  return _.get(_.find(SEVERITY_OPTIONS, { value: severity }), 'badgeText');
+}
+
+export function getSeverityColor(severity) {
+  return _.get(_.find(SEVERITY_OPTIONS, { value: severity }), 'color');
+}
+
+export const getTruncatedText = (text, textLength = 14) => {
+  return `${text.slice(0, textLength)}${text.length > textLength ? '...' : ''}`;
+};
+
+export function registerAlertsCard() {
+  getContentManagementStart().registerContentProvider({
+    id: 'analytics_all_recent_alerts_card_content',
+    getTargetArea: () => ANALYTICS_ALL_OVERVIEW_CONTENT_AREAS.SERVICE_CARDS,
+    getContent: () => ({
+      id: 'analytics_all_recent_alerts_card',
+      kind: 'custom',
+      order: 10,
+      width: 16,
+      render: () => (
+        <DataSourceAlertsCard
+          getDataSourceMenu={getDataSourceManagementPlugin()?.ui.getDataSourceMenu}
+        />
+      ),
+    }),
+  });
+}

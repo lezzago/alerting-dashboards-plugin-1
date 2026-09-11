@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`<EmptyDestinations /> should render empty destinations message 1`] = `
 <div
@@ -46,11 +46,8 @@ exports[`<EmptyDestinations /> should render no results for filter criteria 1`] 
   <div
     class="euiSpacer euiSpacer--l"
   />
-  <div
-    class="euiSpacer euiSpacer--s"
-  />
   <button
-    class="euiButton euiButton--primary euiButton--fill"
+    class="euiButton euiButton--primary euiButton--small euiButton--fill"
     type="button"
   >
     <span

@@ -7,17 +7,18 @@ import _ from 'lodash';
 
 import { INDEX } from '../../utils/constants';
 import { isIndexNotFoundError } from './utils/helpers';
+import { MDSEnabledClientService } from './MDSEnabledClientService';
+import { DEFAULT_HEADERS } from './utils/constants';
 
-export default class MonitorService {
-  constructor(esDriver) {
-    this.esDriver = esDriver;
-  }
-
+export default class MonitorService extends MDSEnabledClientService {
   createMonitor = async (context, req, res) => {
     try {
-      const params = { body: req.body };
-      const { callAsCurrentUser } = await this.esDriver.asScoped(req);
-      const createResponse = await callAsCurrentUser('alerting.createMonitor', params);
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, ['library_write']);
+      if (aclResponse) return aclResponse;
+      const body = await this.enrichTargetArn(context, req, req.body);
+      const params = { body };
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const createResponse = await client('alerting.createMonitor', params);
       return res.ok({
         body: {
           ok: true,
@@ -35,15 +36,42 @@ export default class MonitorService {
     }
   };
 
-  deleteMonitor = async (context, req, res) => {
+  createWorkflow = async (context, req, res) => {
     try {
-      const { id } = req.params;
-      const params = { monitorId: id };
-      const { callAsCurrentUser } = await this.esDriver.asScoped(req);
-      const response = await callAsCurrentUser('alerting.deleteMonitor', params);
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, ['library_write']);
+      if (aclResponse) return aclResponse;
+      const params = { body: req.body };
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const createResponse = await client('alerting.createWorkflow', params);
       return res.ok({
         body: {
-          ok: response.result === 'deleted',
+          ok: true,
+          resp: createResponse,
+        },
+      });
+    } catch (err) {
+      console.error('Alerting - MonitorService - createWorkflow:', err);
+      return res.ok({
+        body: {
+          ok: false,
+          resp: err.message,
+        },
+      });
+    }
+  };
+
+  deleteMonitor = async (context, req, res) => {
+    try {
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, ['library_write']);
+      if (aclResponse) return aclResponse;
+      const { id } = req.params;
+      const params = { monitorId: id };
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const response = await client('alerting.deleteMonitor', params);
+
+      return res.ok({
+        body: {
+          ok: response.result === 'deleted' || response.result === undefined,
         },
       });
     } catch (err) {
@@ -57,19 +85,49 @@ export default class MonitorService {
     }
   };
 
+  deleteWorkflow = async (context, req, res) => {
+    try {
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, ['library_write']);
+      if (aclResponse) return aclResponse;
+      const { id } = req.params;
+      const params = { workflowId: id };
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const response = await client('alerting.deleteWorkflow', params);
+
+      return res.ok({
+        body: {
+          ok: response.result === 'deleted' || response.result === undefined,
+        },
+      });
+    } catch (err) {
+      console.error('Alerting - MonitorService - deleteWorkflow:', err);
+      return res.ok({
+        body: {
+          ok: false,
+          resp: err.message,
+        },
+      });
+    }
+  };
+
   getMonitor = async (context, req, res) => {
     try {
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, [
+        'library_write',
+        'library_read',
+      ]);
+      if (aclResponse) return aclResponse;
       const { id } = req.params;
-      const params = { monitorId: id };
-      const { callAsCurrentUser } = await this.esDriver.asScoped(req);
-      const getResponse = await callAsCurrentUser('alerting.getMonitor', params);
-      const monitor = _.get(getResponse, 'monitor', null);
+      const params = { monitorId: id, headers: DEFAULT_HEADERS };
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const getResponse = await client('alerting.getMonitor', params);
+      let monitor = _.get(getResponse, 'monitor', null);
       const version = _.get(getResponse, '_version', null);
       const ifSeqNo = _.get(getResponse, '_seq_no', null);
       const ifPrimaryTerm = _.get(getResponse, '_primary_term', null);
+      const associated_workflows = _.get(getResponse, 'associated_workflows', null);
       if (monitor) {
-        const { callAsCurrentUser } = this.esDriver.asScoped(req);
-        const searchResponse = await callAsCurrentUser('alerting.getMonitors', {
+        const aggsParams = {
           index: INDEX.ALL_ALERTS,
           body: {
             size: 0,
@@ -96,13 +154,27 @@ export default class MonitorService {
               },
             },
           },
-        });
+        };
+        const searchResponse = await client('alerting.getMonitors', aggsParams);
         const dayCount = _.get(searchResponse, 'aggregations.24_hour_count.buckets.0.doc_count', 0);
         const activeBuckets = _.get(searchResponse, 'aggregations.active_count.buckets', []);
         const activeCount = activeBuckets.reduce(
           (acc, curr) => (curr.key === 'ACTIVE' ? curr.doc_count : acc),
           0
         );
+        if (associated_workflows) {
+          monitor = {
+            ...monitor,
+            associated_workflows,
+            associatedCompositeMonitorCnt: associated_workflows.length,
+          };
+        }
+        monitor = {
+          ...monitor,
+          item_type: monitor.workflow_type || monitor.monitor_type,
+          id,
+          version,
+        };
         return res.ok({
           body: { ok: true, resp: monitor, activeCount, dayCount, version, ifSeqNo, ifPrimaryTerm },
         });
@@ -124,10 +196,59 @@ export default class MonitorService {
     }
   };
 
+  getWorkflow = async (context, req, res) => {
+    try {
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, [
+        'library_write',
+        'library_read',
+      ]);
+      if (aclResponse) return aclResponse;
+      const { id } = req.params;
+      const params = { monitorId: id };
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const getResponse = await client('alerting.getWorkflow', params);
+      let workflow = _.get(getResponse, 'workflow', null);
+      const version = _.get(getResponse, '_version', null);
+      const ifSeqNo = _.get(getResponse, '_seq_no', null);
+      const ifPrimaryTerm = _.get(getResponse, '_primary_term', null);
+      workflow.monitor_type = workflow.workflow_type;
+      workflow = {
+        ...workflow,
+        item_type: workflow.workflow_type,
+        id,
+        version,
+      };
+
+      return res.ok({
+        body: {
+          ok: true,
+          resp: workflow,
+          activeCount: 0,
+          dayCount: 0,
+          version,
+          ifSeqNo,
+          ifPrimaryTerm,
+        },
+      });
+    } catch (err) {
+      console.error('Alerting - MonitorService - getWorkflow:', err);
+      return res.ok({
+        body: {
+          ok: false,
+          resp: err.message,
+        },
+      });
+    }
+  };
+
   updateMonitor = async (context, req, res) => {
     try {
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, ['library_write']);
+      if (aclResponse) return aclResponse;
       const { id } = req.params;
-      const params = { monitorId: id, body: req.body, refresh: 'wait_for' };
+      const body = await this.enrichTargetArn(context, req, req.body);
+      const params = { monitorId: id, body, refresh: 'wait_for' };
+      const { type } = body;
 
       // TODO DRAFT: Are we sure we need to include ifSeqNo and ifPrimaryTerm from the UI side when updating monitors?
       const { ifSeqNo, ifPrimaryTerm } = req.query;
@@ -136,8 +257,11 @@ export default class MonitorService {
         params.if_primary_term = ifPrimaryTerm;
       }
 
-      const { callAsCurrentUser } = await this.esDriver.asScoped(req);
-      const updateResponse = await callAsCurrentUser('alerting.updateMonitor', params);
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const updateResponse = await client(
+        `alerting.${type === 'workflow' ? 'updateWorkflow' : 'updateMonitor'}`,
+        params
+      );
       const { _version, _id } = updateResponse;
       return res.ok({
         body: {
@@ -159,7 +283,13 @@ export default class MonitorService {
 
   getMonitors = async (context, req, res) => {
     try {
-      const { from, size, search, sortDirection, sortField, state } = req.query;
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, [
+        'library_write',
+        'library_read',
+      ]);
+      if (aclResponse) return aclResponse;
+
+      const { from, size, search, sortDirection, sortField, state, monitorIds } = req.query;
 
       let must = { match_all: {} };
       if (search.trim()) {
@@ -175,17 +305,34 @@ export default class MonitorService {
         };
       }
 
-      const filter = [{ term: { 'monitor.type': 'monitor' } }];
-      if (state !== 'all') {
-        const enabled = state === 'enabled';
-        filter.push({ term: { 'monitor.enabled': enabled } });
+      const should = [];
+      const mustList = [must];
+      if (monitorIds !== undefined) {
+        mustList.push({
+          terms: {
+            _id: Array.isArray(monitorIds) ? monitorIds : [monitorIds],
+          },
+        });
+      } else if (monitorIds === 'empty') {
+        mustList.push({
+          terms: {
+            _id: [],
+          },
+        });
       }
 
+      if (state !== 'all') {
+        const enabled = state === 'enabled';
+        should.push({ term: { 'monitor.enabled': enabled } });
+        should.push({ term: { 'workflow.enabled': enabled } });
+      }
+
+      const isAoss = await this.isUnsupportedEndpoint(context, req);
       const monitorSorts = { name: 'monitor.name.keyword' };
       const monitorSortPageData = { size: 1000 };
       if (monitorSorts[sortField]) {
         monitorSortPageData.sort = [{ [monitorSorts[sortField]]: sortDirection }];
-        monitorSortPageData.size = _.defaultTo(size, 1000);
+        monitorSortPageData.size = _.defaultTo(size, isAoss ? 100 : 1000);
         monitorSortPageData.from = _.defaultTo(from, 0);
       }
 
@@ -196,15 +343,30 @@ export default class MonitorService {
           ...monitorSortPageData,
           query: {
             bool: {
-              filter,
-              must,
+              should,
+              minimum_should_match: state !== 'all' ? 1 : 0,
+              must: mustList,
+            },
+          },
+          aggregations: {
+            associated_composite_monitors: {
+              nested: {
+                path: 'workflow.inputs.composite_input.sequence.delegates',
+              },
+              aggs: {
+                monitor_ids: {
+                  terms: {
+                    field: 'workflow.inputs.composite_input.sequence.delegates.monitor_id',
+                  },
+                },
+              },
             },
           },
         },
       };
 
-      const { callAsCurrentUser: alertingCallAsCurrentUser } = await this.esDriver.asScoped(req);
-      const getResponse = await alertingCallAsCurrentUser('alerting.getMonitors', params);
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const getResponse = await client('alerting.getMonitors', params);
 
       const totalMonitors = _.get(getResponse, 'hits.total.value', 0);
       const monitorKeyValueTuples = _.get(getResponse, 'hits.hits', []).map((result) => {
@@ -213,13 +375,23 @@ export default class MonitorService {
           _version: version,
           _seq_no: ifSeqNo,
           _primary_term: ifPrimaryTerm,
-          _source: monitor,
+          _source,
         } = result;
-        const { name, enabled } = monitor;
-        return [id, { id, version, ifSeqNo, ifPrimaryTerm, name, enabled, monitor }];
+        const monitor = _source.monitor ? _source.monitor : _source;
+        monitor['item_type'] = monitor.workflow_type || monitor.monitor_type;
+        const { name, enabled, item_type } = monitor;
+        return [id, { id, version, ifSeqNo, ifPrimaryTerm, name, enabled, item_type, monitor }];
       }, {});
       const monitorMap = new Map(monitorKeyValueTuples);
-      const monitorIds = [...monitorMap.keys()];
+      const associatedCompositeMonitorCountMap = {};
+      _.get(
+        getResponse,
+        'aggregations.associated_composite_monitors.monitor_ids.buckets',
+        []
+      ).forEach(({ key, doc_count }) => {
+        associatedCompositeMonitorCountMap[key] = doc_count;
+      });
+      const monitorIdsOutput = [...monitorMap.keys()];
 
       const aggsOrderData = {};
       const aggsSorts = {
@@ -236,7 +408,7 @@ export default class MonitorService {
         index: INDEX.ALL_ALERTS,
         body: {
           size: 0,
-          query: { terms: { monitor_id: monitorIds } },
+          query: { terms: { monitor_id: monitorIdsOutput } },
           aggregations: {
             uniq_monitor_ids: {
               terms: {
@@ -272,8 +444,7 @@ export default class MonitorService {
         },
       };
 
-      const { callAsCurrentUser } = this.esDriver.asScoped(req);
-      const esAggsResponse = await callAsCurrentUser('alerting.getMonitors', aggsParams);
+      const esAggsResponse = await client('alerting.getMonitors', aggsParams);
       const buckets = _.get(esAggsResponse, 'aggregations.uniq_monitor_ids.buckets', []).map(
         (bucket) => {
           const {
@@ -305,6 +476,7 @@ export default class MonitorService {
             active,
             errors,
             currentTime: Date.now(),
+            associatedCompositeMonitorCnt: associatedCompositeMonitorCountMap[id] || 0,
           };
         }
       );
@@ -318,6 +490,7 @@ export default class MonitorService {
         errors: 0,
         latestAlert: '--',
         currentTime: Date.now(),
+        associatedCompositeMonitorCnt: associatedCompositeMonitorCountMap[monitor.id] || 0,
       }));
 
       let results = _.orderBy(buckets.concat(unusedMonitors), [sortField], [sortDirection]);
@@ -336,30 +509,42 @@ export default class MonitorService {
         },
       });
     } catch (err) {
-      console.error('Alerting - MonitorService - getMonitors', err);
       if (isIndexNotFoundError(err)) {
+        // Config index is not created unitl a monitor is created.
         return res.ok({
-          body: { ok: false, resp: { totalMonitors: 0, monitors: [] } },
+          body: {
+            ok: false,
+            resp: {
+              totalMonitors: 0,
+              monitors: [],
+              message: 'No monitors created',
+            },
+          },
+        });
+      } else {
+        // If the index is created, some error in retrieving the monitors.
+        console.error('Alerting - MonitorService - getMonitors', err);
+        return res.ok({
+          body: {
+            ok: false,
+            resp: err.message,
+          },
         });
       }
-      return res.ok({
-        body: {
-          ok: false,
-          resp: err.message,
-        },
-      });
     }
   };
 
   acknowledgeAlerts = async (context, req, res) => {
     try {
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, ['library_write']);
+      if (aclResponse) return aclResponse;
       const { id } = req.params;
       const params = {
         monitorId: id,
         body: req.body,
       };
-      const { callAsCurrentUser } = this.esDriver.asScoped(req);
-      const acknowledgeResponse = await callAsCurrentUser('alerting.acknowledgeAlerts', params);
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const acknowledgeResponse = await client('alerting.acknowledgeAlerts', params);
       return res.ok({
         body: {
           ok: !acknowledgeResponse.failed.length,
@@ -377,15 +562,51 @@ export default class MonitorService {
     }
   };
 
+  acknowledgeChainedAlerts = async (context, req, res) => {
+    try {
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, ['library_write']);
+      if (aclResponse) return aclResponse;
+      const { id } = req.params;
+      const params = {
+        workflowId: id,
+        body: req.body,
+      };
+      const client = await this.getClientBasedOnDataSource(
+        context,
+        this.dataSourceEnabled,
+        req,
+        this.esDriver
+      );
+      const acknowledgeResponse = await client('alerting.acknowledgeChainedAlerts', params);
+      return res.ok({
+        body: {
+          ok: !acknowledgeResponse.failed.length,
+          resp: acknowledgeResponse,
+        },
+      });
+    } catch (err) {
+      console.error('Alerting - MonitorService - acknowledgeChainedAlerts:', err);
+      return res.ok({
+        body: {
+          ok: false,
+          resp: err.message,
+        },
+      });
+    }
+  };
+
   executeMonitor = async (context, req, res) => {
     try {
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, ['library_write']);
+      if (aclResponse) return aclResponse;
       const { dryrun = 'true' } = req.query;
+      const body = await this.enrichTargetArn(context, req, req.body);
       const params = {
-        body: req.body,
+        body,
         dryrun,
       };
-      const { callAsCurrentUser } = await this.esDriver.asScoped(req);
-      const executeResponse = await callAsCurrentUser('alerting.executeMonitor', params);
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const executeResponse = await client('alerting.executeMonitor', params);
       return res.ok({
         body: {
           ok: true,
@@ -406,11 +627,21 @@ export default class MonitorService {
   //TODO: This is temporarily a pass through call which needs to be deprecated
   searchMonitors = async (context, req, res) => {
     try {
-      const { query, index, size } = req.body;
-      const params = { index, size, body: query };
+      const aclResponse = await this.enforceWorkspaceAcl(context, req, res, [
+        'library_write',
+        'library_read',
+      ]);
+      if (aclResponse) return aclResponse;
+      const { query: queryBody, index, size, ...rest } = req.body || {};
+      const body = { ...(queryBody ?? {}), ...rest };
+      if (size !== undefined) {
+        const isAoss = await this.isUnsupportedEndpoint(context, req);
+        body.size = isAoss ? Math.min(size, 100) : size;
+      }
+      const params = { index, body };
 
-      const { callAsCurrentUser } = await this.esDriver.asScoped(req);
-      const results = await callAsCurrentUser('alerting.getMonitors', params);
+      const client = await this.getClientBasedOnDataSource(context, req);
+      const results = await client('alerting.getMonitors', params);
       return res.ok({
         body: {
           ok: true,
@@ -418,13 +649,28 @@ export default class MonitorService {
         },
       });
     } catch (err) {
-      console.error('Alerting - MonitorService - searchMonitor:', err);
-      return res.ok({
-        body: {
-          ok: false,
-          resp: err.message,
-        },
-      });
+      if (isIndexNotFoundError(err)) {
+        // Config index is not created unitl a monitor is created.
+        return res.ok({
+          body: {
+            ok: false,
+            resp: {
+              totalMonitors: 0,
+              monitors: [],
+              message: 'No monitors created',
+            },
+          },
+        });
+      } else {
+        // If the index is created, some error in retrieving the monitors.
+        console.error('Alerting - MonitorService - searchMonitor:', err);
+        return res.ok({
+          body: {
+            ok: false,
+            resp: err.message,
+          },
+        });
+      }
     }
   };
 }

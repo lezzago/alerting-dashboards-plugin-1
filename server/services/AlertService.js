@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import _ from 'lodash';
+import { MDSEnabledClientService } from './MDSEnabledClientService';
 
 export const GET_ALERTS_SORT_FILTERS = {
   MONITOR_NAME: 'monitor_name',
@@ -13,12 +13,13 @@ export const GET_ALERTS_SORT_FILTERS = {
   ACKNOWLEDGE_TIME: 'acknowledged_time',
 };
 
-export default class AlertService {
-  constructor(esDriver) {
-    this.esDriver = esDriver;
-  }
-
+export default class AlertService extends MDSEnabledClientService {
   getAlerts = async (context, req, res) => {
+    const aclResponse = await this.enforceWorkspaceAcl(context, req, res, [
+      'library_write',
+      'library_read',
+    ]);
+    if (aclResponse) return aclResponse;
     const {
       from = 0,
       size = 20,
@@ -28,6 +29,7 @@ export default class AlertService {
       severityLevel = 'ALL',
       alertState = 'ALL',
       monitorIds = [],
+      monitorType = 'monitor',
     } = req.query;
 
     var params;
@@ -67,23 +69,33 @@ export default class AlertService {
     }
 
     params.startIndex = from;
-    params.size = size;
+    const isAoss = await this.isUnsupportedEndpoint(context, req);
+    params.size = isAoss ? Math.min(size, 100) : size;
     params.severityLevel = severityLevel;
     params.alertState = alertState;
     params.searchString = search;
     if (search.trim()) params.searchString = `*${search.trim().split(' ').join('* *')}*`;
-    if (monitorIds.length > 0)
-      params.monitorId = !Array.isArray(monitorIds) ? monitorIds : monitorIds[0];
+    if (monitorIds.length > 0) {
+      const idField = monitorType === 'composite' ? 'workflowIds' : 'monitorId';
+      params[idField] = !Array.isArray(monitorIds) ? monitorIds : monitorIds[0];
+    }
 
-    const { callAsCurrentUser } = this.esDriver.asScoped(req);
+    const client = await this.getClientBasedOnDataSource(context, req);
     try {
-      const resp = await callAsCurrentUser('alerting.getAlerts', params);
+      const resp = await client('alerting.getAlerts', params);
+
       const alerts = resp.alerts.map((hit) => {
         const alert = hit;
         const id = hit.alert_id;
         const version = hit.alert_version;
-        return { id, ...alert, version };
+        return {
+          id,
+          ...alert,
+          version,
+          alert_source: !!alert.workflow_id ? 'workflow' : 'monitor',
+        };
       });
+
       const totalAlerts = resp.totalAlerts;
 
       return res.ok({
@@ -94,7 +106,34 @@ export default class AlertService {
         },
       });
     } catch (err) {
-      console.log(err.message);
+      console.error(err.message);
+      return res.ok({
+        body: {
+          ok: false,
+          err: err.message,
+        },
+      });
+    }
+  };
+
+  getWorkflowAlerts = async (context, req, res) => {
+    const aclResponse = await this.enforceWorkspaceAcl(context, req, res, [
+      'library_write',
+      'library_read',
+    ]);
+    if (aclResponse) return aclResponse;
+    const client = await this.getClientBasedOnDataSource(context, req);
+    try {
+      const resp = await client('alerting.getWorkflowAlerts', req.query);
+
+      return res.ok({
+        body: {
+          ok: true,
+          resp,
+        },
+      });
+    } catch (err) {
+      console.error(err.message);
       return res.ok({
         body: {
           ok: false,

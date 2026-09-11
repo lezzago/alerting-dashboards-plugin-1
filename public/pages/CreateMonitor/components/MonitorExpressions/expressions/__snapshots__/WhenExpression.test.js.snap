@@ -1,15 +1,15 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`WhenExpression renders 1`] = `
 <div
-  class="euiPopover euiPopover--anchorDownLeft euiPopover--withTitle"
+  class="euiPopover euiPopover--anchorDownLeft"
   id="when-popover"
 >
   <div
     class="euiPopover__anchor"
   >
     <button
-      class="euiExpression euiExpression-isClickable euiExpression-isUppercase euiExpression--secondary"
+      class="euiExpression euiExpression-isClickable euiExpression-isUppercase euiExpression--success"
     >
       <span
         class="euiExpression__description"

@@ -1,14 +1,14 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`FormikFieldNumber renders 1`] = `
 <div
-  class="euiFormControlLayout"
+  class="euiFormControlLayout euiFormControlLayout--compressed"
 >
   <div
     class="euiFormControlLayout__childrenWrapper"
   >
     <input
-      class="euiFieldNumber"
+      class="euiFieldNumber euiFieldNumber--compressed"
       name="testing"
       type="number"
     />

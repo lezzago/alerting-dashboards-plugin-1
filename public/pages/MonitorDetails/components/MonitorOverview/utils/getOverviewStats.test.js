@@ -27,6 +27,10 @@ describe('getOverviewStats', () => {
         value: 'Extraction Query',
       },
       {
+        header: 'Index',
+        value: DEFAULT_EMPTY_DATA,
+      },
+      {
         header: 'Total active alerts',
         value: activeCount,
       },
@@ -45,10 +49,6 @@ describe('getOverviewStats', () => {
       {
         header: 'Monitor version number',
         value: monitorVersion,
-      },
-      {
-        header: 'Last updated by',
-        value: monitor.user.name,
       },
     ]);
   });

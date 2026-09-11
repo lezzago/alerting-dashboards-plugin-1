@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`AnomalyDetectors renders 1`] = `
 <Formik
@@ -6,14 +6,23 @@ exports[`AnomalyDetectors renders 1`] = `
     Object {
       "aggregationType": "count",
       "aggregations": Array [],
+      "associatedMonitors": Object {
+        "sequence": Object {
+          "delegates": Array [],
+        },
+      },
+      "associatedMonitorsEditor": "",
+      "associatedMonitorsList": Array [],
       "bucketUnitOfTime": "h",
       "bucketValue": 1,
+      "clusterNames": Array [],
       "cronExpression": "0 */1 * * *",
       "daily": 0,
       "description": "",
       "detectorId": "",
       "disabled": false,
       "fieldName": Array [],
+      "filters": Array [],
       "frequency": "interval",
       "groupBy": Array [],
       "groupByField": Array [
@@ -24,6 +33,9 @@ exports[`AnomalyDetectors renders 1`] = `
       "groupedOverFieldName": "bytes",
       "groupedOverTop": 5,
       "index": Array [],
+      "lookBackAmount": 1,
+      "lookBackUnit": "hours",
+      "monitor_mode": "ppl",
       "monitor_type": "query_level_monitor",
       "monthly": Object {
         "day": 1,
@@ -35,6 +47,10 @@ exports[`AnomalyDetectors renders 1`] = `
         "interval": 1,
         "unit": "MINUTES",
       },
+      "pplPreviewError": null,
+      "pplPreviewResult": null,
+      "pplQuery": "",
+      "preventVisualEditor": false,
       "queries": Array [],
       "query": "{
     \\"size\\": 0,
@@ -44,13 +60,16 @@ exports[`AnomalyDetectors renders 1`] = `
 }",
       "searchType": "graph",
       "timeField": "",
+      "timestampField": "",
       "timezone": Array [],
       "uri": Object {
         "api_type": "",
+        "clusters": Array [],
         "path": "",
         "path_params": "",
         "url": "",
       },
+      "useLookBackWindow": false,
       "weekly": Object {
         "fri": false,
         "mon": false,
@@ -59,13 +78,6 @@ exports[`AnomalyDetectors renders 1`] = `
         "thur": false,
         "tue": false,
         "wed": false,
-      },
-      "where": Object {
-        "fieldName": Array [],
-        "fieldRangeEnd": 0,
-        "fieldRangeStart": 0,
-        "fieldValue": "",
-        "operator": "is",
       },
     }
   }
@@ -76,14 +88,23 @@ exports[`AnomalyDetectors renders 1`] = `
       Object {
         "aggregationType": "count",
         "aggregations": Array [],
+        "associatedMonitors": Object {
+          "sequence": Object {
+            "delegates": Array [],
+          },
+        },
+        "associatedMonitorsEditor": "",
+        "associatedMonitorsList": Array [],
         "bucketUnitOfTime": "h",
         "bucketValue": 1,
+        "clusterNames": Array [],
         "cronExpression": "0 */1 * * *",
         "daily": 0,
         "description": "",
         "detectorId": "",
         "disabled": false,
         "fieldName": Array [],
+        "filters": Array [],
         "frequency": "interval",
         "groupBy": Array [],
         "groupByField": Array [
@@ -94,6 +115,9 @@ exports[`AnomalyDetectors renders 1`] = `
         "groupedOverFieldName": "bytes",
         "groupedOverTop": 5,
         "index": Array [],
+        "lookBackAmount": 1,
+        "lookBackUnit": "hours",
+        "monitor_mode": "ppl",
         "monitor_type": "query_level_monitor",
         "monthly": Object {
           "day": 1,
@@ -105,6 +129,10 @@ exports[`AnomalyDetectors renders 1`] = `
           "interval": 1,
           "unit": "MINUTES",
         },
+        "pplPreviewError": null,
+        "pplPreviewResult": null,
+        "pplQuery": "",
+        "preventVisualEditor": false,
         "queries": Array [],
         "query": "{
     \\"size\\": 0,
@@ -114,13 +142,16 @@ exports[`AnomalyDetectors renders 1`] = `
 }",
         "searchType": "graph",
         "timeField": "",
+        "timestampField": "",
         "timezone": Array [],
         "uri": Object {
           "api_type": "",
+          "clusters": Array [],
           "path": "",
           "path_params": "",
           "url": "",
         },
+        "useLookBackWindow": false,
         "weekly": Object {
           "fri": false,
           "mon": false,
@@ -129,13 +160,6 @@ exports[`AnomalyDetectors renders 1`] = `
           "thur": false,
           "tue": false,
           "wed": false,
-        },
-        "where": Object {
-          "fieldName": Array [],
-          "fieldRangeEnd": 0,
-          "fieldRangeStart": 0,
-          "fieldValue": "",
-          "operator": "is",
         },
       }
     }
@@ -207,14 +231,23 @@ exports[`AnomalyDetectors renders 1`] = `
                   "initialValues": Object {
                     "aggregationType": "count",
                     "aggregations": Array [],
+                    "associatedMonitors": Object {
+                      "sequence": Object {
+                        "delegates": Array [],
+                      },
+                    },
+                    "associatedMonitorsEditor": "",
+                    "associatedMonitorsList": Array [],
                     "bucketUnitOfTime": "h",
                     "bucketValue": 1,
+                    "clusterNames": Array [],
                     "cronExpression": "0 */1 * * *",
                     "daily": 0,
                     "description": "",
                     "detectorId": "",
                     "disabled": false,
                     "fieldName": Array [],
+                    "filters": Array [],
                     "frequency": "interval",
                     "groupBy": Array [],
                     "groupByField": Array [
@@ -225,6 +258,9 @@ exports[`AnomalyDetectors renders 1`] = `
                     "groupedOverFieldName": "bytes",
                     "groupedOverTop": 5,
                     "index": Array [],
+                    "lookBackAmount": 1,
+                    "lookBackUnit": "hours",
+                    "monitor_mode": "ppl",
                     "monitor_type": "query_level_monitor",
                     "monthly": Object {
                       "day": 1,
@@ -236,6 +272,10 @@ exports[`AnomalyDetectors renders 1`] = `
                       "interval": 1,
                       "unit": "MINUTES",
                     },
+                    "pplPreviewError": null,
+                    "pplPreviewResult": null,
+                    "pplQuery": "",
+                    "preventVisualEditor": false,
                     "queries": Array [],
                     "query": "{
     \\"size\\": 0,
@@ -245,13 +285,16 @@ exports[`AnomalyDetectors renders 1`] = `
 }",
                     "searchType": "graph",
                     "timeField": "",
+                    "timestampField": "",
                     "timezone": Array [],
                     "uri": Object {
                       "api_type": "",
+                      "clusters": Array [],
                       "path": "",
                       "path_params": "",
                       "url": "",
                     },
+                    "useLookBackWindow": false,
                     "weekly": Object {
                       "fri": false,
                       "mon": false,
@@ -260,13 +303,6 @@ exports[`AnomalyDetectors renders 1`] = `
                       "thur": false,
                       "tue": false,
                       "wed": false,
-                    },
-                    "where": Object {
-                      "fieldName": Array [],
-                      "fieldRangeEnd": 0,
-                      "fieldRangeStart": 0,
-                      "fieldValue": "",
-                      "operator": "is",
                     },
                   },
                   "isSubmitting": false,
@@ -296,14 +332,23 @@ exports[`AnomalyDetectors renders 1`] = `
                   "values": Object {
                     "aggregationType": "count",
                     "aggregations": Array [],
+                    "associatedMonitors": Object {
+                      "sequence": Object {
+                        "delegates": Array [],
+                      },
+                    },
+                    "associatedMonitorsEditor": "",
+                    "associatedMonitorsList": Array [],
                     "bucketUnitOfTime": "h",
                     "bucketValue": 1,
+                    "clusterNames": Array [],
                     "cronExpression": "0 */1 * * *",
                     "daily": 0,
                     "description": "",
                     "detectorId": "",
                     "disabled": false,
                     "fieldName": Array [],
+                    "filters": Array [],
                     "frequency": "interval",
                     "groupBy": Array [],
                     "groupByField": Array [
@@ -314,6 +359,9 @@ exports[`AnomalyDetectors renders 1`] = `
                     "groupedOverFieldName": "bytes",
                     "groupedOverTop": 5,
                     "index": Array [],
+                    "lookBackAmount": 1,
+                    "lookBackUnit": "hours",
+                    "monitor_mode": "ppl",
                     "monitor_type": "query_level_monitor",
                     "monthly": Object {
                       "day": 1,
@@ -325,6 +373,10 @@ exports[`AnomalyDetectors renders 1`] = `
                       "interval": 1,
                       "unit": "MINUTES",
                     },
+                    "pplPreviewError": null,
+                    "pplPreviewResult": null,
+                    "pplQuery": "",
+                    "preventVisualEditor": false,
                     "queries": Array [],
                     "query": "{
     \\"size\\": 0,
@@ -334,13 +386,16 @@ exports[`AnomalyDetectors renders 1`] = `
 }",
                     "searchType": "graph",
                     "timeField": "",
+                    "timestampField": "",
                     "timezone": Array [],
                     "uri": Object {
                       "api_type": "",
+                      "clusters": Array [],
                       "path": "",
                       "path_params": "",
                       "url": "",
                     },
+                    "useLookBackWindow": false,
                     "weekly": Object {
                       "fri": false,
                       "mon": false,
@@ -349,13 +404,6 @@ exports[`AnomalyDetectors renders 1`] = `
                       "thur": false,
                       "tue": false,
                       "wed": false,
-                    },
-                    "where": Object {
-                      "fieldName": Array [],
-                      "fieldRangeEnd": 0,
-                      "fieldRangeStart": 0,
-                      "fieldValue": "",
-                      "operator": "is",
                     },
                   },
                 }
@@ -369,9 +417,9 @@ exports[`AnomalyDetectors renders 1`] = `
                 }
               }
             >
-              <EuiFormRow
+              <EuiCompressedFormRow
                 describedByIds={Array []}
-                display="row"
+                display="rowCompressed"
                 fullWidth={false}
                 hasChildLabel={true}
                 hasEmptyLabelSpace={false}
@@ -381,7 +429,7 @@ exports[`AnomalyDetectors renders 1`] = `
                 labelType="label"
               >
                 <div
-                  className="euiFormRow"
+                  className="euiFormRow euiFormRow--compressed"
                   id="detectorId-form-row-row"
                 >
                   <div
@@ -433,14 +481,23 @@ exports[`AnomalyDetectors renders 1`] = `
                           "initialValues": Object {
                             "aggregationType": "count",
                             "aggregations": Array [],
+                            "associatedMonitors": Object {
+                              "sequence": Object {
+                                "delegates": Array [],
+                              },
+                            },
+                            "associatedMonitorsEditor": "",
+                            "associatedMonitorsList": Array [],
                             "bucketUnitOfTime": "h",
                             "bucketValue": 1,
+                            "clusterNames": Array [],
                             "cronExpression": "0 */1 * * *",
                             "daily": 0,
                             "description": "",
                             "detectorId": "",
                             "disabled": false,
                             "fieldName": Array [],
+                            "filters": Array [],
                             "frequency": "interval",
                             "groupBy": Array [],
                             "groupByField": Array [
@@ -451,6 +508,9 @@ exports[`AnomalyDetectors renders 1`] = `
                             "groupedOverFieldName": "bytes",
                             "groupedOverTop": 5,
                             "index": Array [],
+                            "lookBackAmount": 1,
+                            "lookBackUnit": "hours",
+                            "monitor_mode": "ppl",
                             "monitor_type": "query_level_monitor",
                             "monthly": Object {
                               "day": 1,
@@ -462,6 +522,10 @@ exports[`AnomalyDetectors renders 1`] = `
                               "interval": 1,
                               "unit": "MINUTES",
                             },
+                            "pplPreviewError": null,
+                            "pplPreviewResult": null,
+                            "pplQuery": "",
+                            "preventVisualEditor": false,
                             "queries": Array [],
                             "query": "{
     \\"size\\": 0,
@@ -471,13 +535,16 @@ exports[`AnomalyDetectors renders 1`] = `
 }",
                             "searchType": "graph",
                             "timeField": "",
+                            "timestampField": "",
                             "timezone": Array [],
                             "uri": Object {
                               "api_type": "",
+                              "clusters": Array [],
                               "path": "",
                               "path_params": "",
                               "url": "",
                             },
+                            "useLookBackWindow": false,
                             "weekly": Object {
                               "fri": false,
                               "mon": false,
@@ -486,13 +553,6 @@ exports[`AnomalyDetectors renders 1`] = `
                               "thur": false,
                               "tue": false,
                               "wed": false,
-                            },
-                            "where": Object {
-                              "fieldName": Array [],
-                              "fieldRangeEnd": 0,
-                              "fieldRangeStart": 0,
-                              "fieldValue": "",
-                              "operator": "is",
                             },
                           },
                           "isSubmitting": false,
@@ -522,14 +582,23 @@ exports[`AnomalyDetectors renders 1`] = `
                           "values": Object {
                             "aggregationType": "count",
                             "aggregations": Array [],
+                            "associatedMonitors": Object {
+                              "sequence": Object {
+                                "delegates": Array [],
+                              },
+                            },
+                            "associatedMonitorsEditor": "",
+                            "associatedMonitorsList": Array [],
                             "bucketUnitOfTime": "h",
                             "bucketValue": 1,
+                            "clusterNames": Array [],
                             "cronExpression": "0 */1 * * *",
                             "daily": 0,
                             "description": "",
                             "detectorId": "",
                             "disabled": false,
                             "fieldName": Array [],
+                            "filters": Array [],
                             "frequency": "interval",
                             "groupBy": Array [],
                             "groupByField": Array [
@@ -540,6 +609,9 @@ exports[`AnomalyDetectors renders 1`] = `
                             "groupedOverFieldName": "bytes",
                             "groupedOverTop": 5,
                             "index": Array [],
+                            "lookBackAmount": 1,
+                            "lookBackUnit": "hours",
+                            "monitor_mode": "ppl",
                             "monitor_type": "query_level_monitor",
                             "monthly": Object {
                               "day": 1,
@@ -551,6 +623,10 @@ exports[`AnomalyDetectors renders 1`] = `
                               "interval": 1,
                               "unit": "MINUTES",
                             },
+                            "pplPreviewError": null,
+                            "pplPreviewResult": null,
+                            "pplQuery": "",
+                            "preventVisualEditor": false,
                             "queries": Array [],
                             "query": "{
     \\"size\\": 0,
@@ -560,13 +636,16 @@ exports[`AnomalyDetectors renders 1`] = `
 }",
                             "searchType": "graph",
                             "timeField": "",
+                            "timestampField": "",
                             "timezone": Array [],
                             "uri": Object {
                               "api_type": "",
+                              "clusters": Array [],
                               "path": "",
                               "path_params": "",
                               "url": "",
                             },
+                            "useLookBackWindow": false,
                             "weekly": Object {
                               "fri": false,
                               "mon": false,
@@ -575,13 +654,6 @@ exports[`AnomalyDetectors renders 1`] = `
                               "thur": false,
                               "tue": false,
                               "wed": false,
-                            },
-                            "where": Object {
-                              "fieldName": Array [],
-                              "fieldRangeEnd": 0,
-                              "fieldRangeStart": 0,
-                              "fieldValue": "",
-                              "operator": "is",
                             },
                           },
                         }
@@ -604,9 +676,9 @@ exports[`AnomalyDetectors renders 1`] = `
                       onBlur={[Function]}
                       onFocus={[Function]}
                     >
-                      <EuiComboBox
+                      <EuiCompressedComboBox
                         async={false}
-                        compressed={false}
+                        compressed={true}
                         fullWidth={false}
                         id="detectorId"
                         isClearable={false}
@@ -626,14 +698,14 @@ exports[`AnomalyDetectors renders 1`] = `
                         <div
                           aria-expanded={false}
                           aria-haspopup="listbox"
-                          className="euiComboBox"
+                          className="euiComboBox euiComboBox--compressed"
                           name="detectorId"
                           onKeyDown={[Function]}
                           role="combobox"
                         >
                           <EuiComboBoxInput
                             autoSizeInputRef={[Function]}
-                            compressed={false}
+                            compressed={true}
                             fullWidth={false}
                             hasSelectedOptions={false}
                             id="detectorId"
@@ -660,7 +732,7 @@ exports[`AnomalyDetectors renders 1`] = `
                             value=""
                           >
                             <EuiFormControlLayout
-                              compressed={false}
+                              compressed={true}
                               fullWidth={false}
                               icon={
                                 Object {
@@ -675,13 +747,13 @@ exports[`AnomalyDetectors renders 1`] = `
                               }
                             >
                               <div
-                                className="euiFormControlLayout"
+                                className="euiFormControlLayout euiFormControlLayout--compressed"
                               >
                                 <div
                                   className="euiFormControlLayout__childrenWrapper"
                                 >
                                   <div
-                                    className="euiComboBox__inputWrap euiComboBox__inputWrap--noWrap"
+                                    className="euiComboBox__inputWrap euiComboBox__inputWrap--compressed euiComboBox__inputWrap--noWrap"
                                     data-test-subj="comboBoxInput"
                                     onClick={[Function]}
                                     tabIndex={-1}
@@ -752,6 +824,7 @@ exports[`AnomalyDetectors renders 1`] = `
                                     </AutosizeInput>
                                   </div>
                                   <EuiFormControlLayoutIcons
+                                    compressed={true}
                                     icon={
                                       Object {
                                         "aria-label": "Open list of options",
@@ -772,6 +845,7 @@ exports[`AnomalyDetectors renders 1`] = `
                                         data-test-subj="comboBoxToggleListButton"
                                         iconRef={[Function]}
                                         onClick={[Function]}
+                                        size="s"
                                         type="arrowDown"
                                       >
                                         <button
@@ -784,6 +858,7 @@ exports[`AnomalyDetectors renders 1`] = `
                                           <EuiIcon
                                             aria-hidden="true"
                                             className="euiFormControlLayoutCustomIcon__icon"
+                                            size="s"
                                             type="arrowDown"
                                           >
                                             <div>
@@ -799,11 +874,11 @@ exports[`AnomalyDetectors renders 1`] = `
                             </EuiFormControlLayout>
                           </EuiComboBoxInput>
                         </div>
-                      </EuiComboBox>
+                      </EuiCompressedComboBox>
                     </ComboBox>
                   </div>
                 </div>
-              </EuiFormRow>
+              </EuiCompressedFormRow>
             </FormikFormRow>
           </Field>
         </FormikInputWrapper>

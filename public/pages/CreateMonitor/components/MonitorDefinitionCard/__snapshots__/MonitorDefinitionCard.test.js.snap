@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`MonitorDefinitionCard renders without AD plugin 1`] = `
 <div>
@@ -27,6 +27,11 @@ exports[`MonitorDefinitionCard renders without AD plugin 1`] = `
         <div>
           EuiIconMock
         </div>
+        <span
+          class="euiScreenReaderOnly"
+        >
+          (opens in a new tab or window)
+        </span>
       </a>
     </div>
   </div>
@@ -39,45 +44,36 @@ exports[`MonitorDefinitionCard renders without AD plugin 1`] = `
       style="width:275px"
     >
       <div
-        class="euiFormRow"
-        id="searchTypeGraph-form-row-row"
+        class="euiPanel euiPanel--borderRadiusMedium euiPanel--plain euiPanel--hasShadow euiPanel--hasBorder euiPanel--flexGrowZero euiSplitPanel euiSplitPanel--row euiCheckableCard eui-fullHeight"
       >
         <div
-          class="euiFormRow__fieldWrapper"
+          class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusNone euiPanel--subdued euiPanel--noShadow euiPanel--noBorder euiPanel--flexGrowZero euiPanel--isClickable euiSplitPanel__inner"
         >
           <div
-            class="euiCheckableCard"
+            class="euiRadio euiRadio--noLabel"
+            data-test-subj="visualEditorRadioCard"
           >
+            <input
+              class="euiRadio__input"
+              id="visualEditorRadioCard"
+              name="searchTypeGraph"
+              type="radio"
+              value="graph"
+            />
             <div
-              class="euiCheckableCard__row"
-            >
-              <div
-                class="euiCheckableCard__control"
-              >
-                <div
-                  class="euiRadio euiRadio--noLabel"
-                  data-test-subj="visualEditorRadioCard"
-                >
-                  <input
-                    class="euiRadio__input"
-                    id="visualEditorRadioCard"
-                    name="searchTypeGraph"
-                    type="radio"
-                    value="graph"
-                  />
-                  <div
-                    class="euiRadio__circle"
-                  />
-                </div>
-              </div>
-              <label
-                class="euiCheckableCard__label"
-                for="visualEditorRadioCard"
-              >
-                Visual editor
-              </label>
-            </div>
+              class="euiRadio__circle"
+            />
           </div>
+        </div>
+        <div
+          class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusNone euiPanel--transparent euiPanel--noShadow euiPanel--noBorder euiSplitPanel__inner"
+        >
+          <label
+            class="euiCheckableCard__label"
+            for="visualEditorRadioCard"
+          >
+            Visual editor
+          </label>
         </div>
       </div>
     </div>
@@ -86,45 +82,36 @@ exports[`MonitorDefinitionCard renders without AD plugin 1`] = `
       style="width:275px"
     >
       <div
-        class="euiFormRow"
-        id="searchTypeQuery-form-row-row"
+        class="euiPanel euiPanel--borderRadiusMedium euiPanel--plain euiPanel--hasShadow euiPanel--hasBorder euiPanel--flexGrowZero euiSplitPanel euiSplitPanel--row euiCheckableCard eui-fullHeight"
       >
         <div
-          class="euiFormRow__fieldWrapper"
+          class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusNone euiPanel--subdued euiPanel--noShadow euiPanel--noBorder euiPanel--flexGrowZero euiPanel--isClickable euiSplitPanel__inner"
         >
           <div
-            class="euiCheckableCard"
+            class="euiRadio euiRadio--noLabel"
+            data-test-subj="extractionQueryEditorRadioCard"
           >
+            <input
+              class="euiRadio__input"
+              id="extractionQueryEditorRadioCard"
+              name="searchTypeQuery"
+              type="radio"
+              value="query"
+            />
             <div
-              class="euiCheckableCard__row"
-            >
-              <div
-                class="euiCheckableCard__control"
-              >
-                <div
-                  class="euiRadio euiRadio--noLabel"
-                  data-test-subj="extractionQueryEditorRadioCard"
-                >
-                  <input
-                    class="euiRadio__input"
-                    id="extractionQueryEditorRadioCard"
-                    name="searchTypeQuery"
-                    type="radio"
-                    value="query"
-                  />
-                  <div
-                    class="euiRadio__circle"
-                  />
-                </div>
-              </div>
-              <label
-                class="euiCheckableCard__label"
-                for="extractionQueryEditorRadioCard"
-              >
-                Extraction query editor
-              </label>
-            </div>
+              class="euiRadio__circle"
+            />
           </div>
+        </div>
+        <div
+          class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusNone euiPanel--transparent euiPanel--noShadow euiPanel--noBorder euiSplitPanel__inner"
+        >
+          <label
+            class="euiCheckableCard__label"
+            for="extractionQueryEditorRadioCard"
+          >
+            Extraction query editor
+          </label>
         </div>
       </div>
     </div>
@@ -159,6 +146,11 @@ exports[`MonitorDefinitionCard renders without AD plugin 2`] = `
         <div>
           EuiIconMock
         </div>
+        <span
+          class="euiScreenReaderOnly"
+        >
+          (opens in a new tab or window)
+        </span>
       </a>
     </div>
   </div>
@@ -171,45 +163,36 @@ exports[`MonitorDefinitionCard renders without AD plugin 2`] = `
       style="width:275px"
     >
       <div
-        class="euiFormRow"
-        id="searchTypeGraph-form-row-row"
+        class="euiPanel euiPanel--borderRadiusMedium euiPanel--plain euiPanel--hasShadow euiPanel--hasBorder euiPanel--flexGrowZero euiSplitPanel euiSplitPanel--row euiCheckableCard eui-fullHeight"
       >
         <div
-          class="euiFormRow__fieldWrapper"
+          class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusNone euiPanel--subdued euiPanel--noShadow euiPanel--noBorder euiPanel--flexGrowZero euiPanel--isClickable euiSplitPanel__inner"
         >
           <div
-            class="euiCheckableCard"
+            class="euiRadio euiRadio--noLabel"
+            data-test-subj="visualEditorRadioCard"
           >
+            <input
+              class="euiRadio__input"
+              id="visualEditorRadioCard"
+              name="searchTypeGraph"
+              type="radio"
+              value="graph"
+            />
             <div
-              class="euiCheckableCard__row"
-            >
-              <div
-                class="euiCheckableCard__control"
-              >
-                <div
-                  class="euiRadio euiRadio--noLabel"
-                  data-test-subj="visualEditorRadioCard"
-                >
-                  <input
-                    class="euiRadio__input"
-                    id="visualEditorRadioCard"
-                    name="searchTypeGraph"
-                    type="radio"
-                    value="graph"
-                  />
-                  <div
-                    class="euiRadio__circle"
-                  />
-                </div>
-              </div>
-              <label
-                class="euiCheckableCard__label"
-                for="visualEditorRadioCard"
-              >
-                Visual editor
-              </label>
-            </div>
+              class="euiRadio__circle"
+            />
           </div>
+        </div>
+        <div
+          class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusNone euiPanel--transparent euiPanel--noShadow euiPanel--noBorder euiSplitPanel__inner"
+        >
+          <label
+            class="euiCheckableCard__label"
+            for="visualEditorRadioCard"
+          >
+            Visual editor
+          </label>
         </div>
       </div>
     </div>
@@ -218,45 +201,36 @@ exports[`MonitorDefinitionCard renders without AD plugin 2`] = `
       style="width:275px"
     >
       <div
-        class="euiFormRow"
-        id="searchTypeQuery-form-row-row"
+        class="euiPanel euiPanel--borderRadiusMedium euiPanel--plain euiPanel--hasShadow euiPanel--hasBorder euiPanel--flexGrowZero euiSplitPanel euiSplitPanel--row euiCheckableCard eui-fullHeight"
       >
         <div
-          class="euiFormRow__fieldWrapper"
+          class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusNone euiPanel--subdued euiPanel--noShadow euiPanel--noBorder euiPanel--flexGrowZero euiPanel--isClickable euiSplitPanel__inner"
         >
           <div
-            class="euiCheckableCard"
+            class="euiRadio euiRadio--noLabel"
+            data-test-subj="extractionQueryEditorRadioCard"
           >
+            <input
+              class="euiRadio__input"
+              id="extractionQueryEditorRadioCard"
+              name="searchTypeQuery"
+              type="radio"
+              value="query"
+            />
             <div
-              class="euiCheckableCard__row"
-            >
-              <div
-                class="euiCheckableCard__control"
-              >
-                <div
-                  class="euiRadio euiRadio--noLabel"
-                  data-test-subj="extractionQueryEditorRadioCard"
-                >
-                  <input
-                    class="euiRadio__input"
-                    id="extractionQueryEditorRadioCard"
-                    name="searchTypeQuery"
-                    type="radio"
-                    value="query"
-                  />
-                  <div
-                    class="euiRadio__circle"
-                  />
-                </div>
-              </div>
-              <label
-                class="euiCheckableCard__label"
-                for="extractionQueryEditorRadioCard"
-              >
-                Extraction query editor
-              </label>
-            </div>
+              class="euiRadio__circle"
+            />
           </div>
+        </div>
+        <div
+          class="euiPanel euiPanel--paddingMedium euiPanel--borderRadiusNone euiPanel--transparent euiPanel--noShadow euiPanel--noBorder euiSplitPanel__inner"
+        >
+          <label
+            class="euiCheckableCard__label"
+            for="extractionQueryEditorRadioCard"
+          >
+            Extraction query editor
+          </label>
         </div>
       </div>
     </div>

@@ -3,32 +3,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { EuiSpacer } from '@elastic/eui';
+import React, { useMemo, Fragment, useEffect } from 'react';
+import { EuiSpacer, EuiCallOut } from '@elastic/eui';
 import ContentPanel from '../../../../components/ContentPanel';
 import FormikFieldText from '../../../../components/FormControls/FormikFieldText';
 import { hasError, isInvalid, required, validateMonitorName } from '../../../../utils/validate';
-import Schedule from '../../components/Schedule';
 import MonitorDefinitionCard from '../../components/MonitorDefinitionCard';
 import MonitorType from '../../components/MonitorType';
 import AnomalyDetectors from '../AnomalyDetectors/AnomalyDetectors';
-import { MONITOR_TYPE } from '../../../../utils/constants';
+import { MONITOR_TYPE, SEARCH_TYPE } from '../../../../utils/constants';
+import Schedule from '../../components/Schedule';
+import { getDataSourceId } from '../../../utils/helpers';
+import { getDataSourceMetadata, isPplAlertingEnabled } from '../../../../services';
+import { useFormikContext } from 'formik';
+import { FORMIK_INITIAL_VALUES } from '../CreateMonitor/utils/constants';
 
-const renderAnomalyDetector = (httpClient, values, detectorId) => {
-  return {
-    actions: [],
-    content: (
-      <React.Fragment>
-        <AnomalyDetectors
-          httpClient={httpClient}
-          values={values}
-          renderEmptyMessage={renderEmptyMessage}
-          detectorId={detectorId}
-        />
-      </React.Fragment>
-    ),
-  };
-};
+const renderAnomalyDetector = ({
+  httpClient,
+  values,
+  detectorId,
+  flyoutMode,
+  landingDataSourceId,
+}) => ({
+  actions: [],
+  content: (
+    <React.Fragment>
+      <AnomalyDetectors
+        httpClient={httpClient}
+        values={values}
+        renderEmptyMessage={renderEmptyMessage}
+        detectorId={detectorId}
+        flyoutMode={flyoutMode}
+        landingDataSourceId={landingDataSourceId}
+      />
+    </React.Fragment>
+  ),
+});
 
 function renderEmptyMessage(message) {
   return (
@@ -50,26 +60,59 @@ const MonitorDetails = ({
   isAd,
   plugins,
   detectorId,
+  flyoutMode,
+  landingDataSourceId,
+  isServerless,
 }) => {
-  const anomalyDetectorContent = isAd && renderAnomalyDetector(httpClient, values, detectorId);
-  const displayMonitorDefinitionCards = values.monitor_type !== MONITOR_TYPE.CLUSTER_METRICS;
+  const { setFieldValue } = useFormikContext();
+  const dataSourceId =
+    (() => {
+      try {
+        return getDataSourceId();
+      } catch (e) {
+        return undefined;
+      }
+    })() || landingDataSourceId;
+  const isMustang = getDataSourceMetadata()?.isMustang || false;
+  const anomalyDetectorContent =
+    isAd &&
+    renderAnomalyDetector({ httpClient, values, detectorId, flyoutMode, landingDataSourceId });
+  const isPpl = values.monitor_type === MONITOR_TYPE.PPL;
+  const displayMonitorDefinitionCards =
+    values.monitor_type !== MONITOR_TYPE.CLUSTER_METRICS && !isPpl && !isMustang;
+  const Container = useMemo(
+    () => (flyoutMode ? ({ children }) => <>{children}</> : ContentPanel),
+    [flyoutMode]
+  );
+
+  // Mustang domains only support PPL monitor type. Auto-select PPL type
+  useEffect(() => {
+    if (isMustang && values.monitor_type !== MONITOR_TYPE.PPL) {
+      setFieldValue('monitor_type', MONITOR_TYPE.PPL);
+      setFieldValue('searchType', SEARCH_TYPE.PPL);
+      setFieldValue('pplQuery', FORMIK_INITIAL_VALUES.pplQuery || '');
+      setFieldValue('useLookBackWindow', false);
+      setFieldValue('lookBackAmount', FORMIK_INITIAL_VALUES.lookBackAmount);
+      setFieldValue('lookBackUnit', FORMIK_INITIAL_VALUES.lookBackUnit);
+      setFieldValue('timestampField', FORMIK_INITIAL_VALUES.timestampField);
+    } else if (!isMustang && values.monitor_type === MONITOR_TYPE.PPL && !isPplAlertingEnabled()) {
+      setFieldValue('monitor_type', MONITOR_TYPE.QUERY_LEVEL);
+      setFieldValue('searchType', SEARCH_TYPE.GRAPH);
+    }
+  }, [isMustang]);
+
   return (
-    <ContentPanel
+    <Container
       title="Monitor details"
       titleSize="s"
-      panelStyles={{
-        paddingBottom: '20px',
-        paddingLeft: '10px',
-        paddingRight: '10px',
-        paddingTop: '20px',
-      }}
+      panelStyles={{ padding: '16px' }}
       actions={anomalyDetectorContent.actions}
     >
-      <EuiSpacer size="s" />
+      {!flyoutMode && <EuiSpacer size="s" />}
       <FormikFieldText
         name="name"
         formRow
-        fieldProps={{ validate: validateMonitorName(httpClient, monitorToEdit) }}
+        fieldProps={{ validate: validateMonitorName(httpClient, monitorToEdit, flyoutMode) }}
         rowProps={{
           label: 'Monitor name',
           isInvalid,
@@ -86,26 +129,48 @@ const MonitorDetails = ({
           },
         }}
       />
-      <EuiSpacer size="m" />
-      <MonitorType values={values} />
 
-      {displayMonitorDefinitionCards ? (
+      {!flyoutMode && !isMustang && (
         <div>
           <EuiSpacer size="m" />
-          <MonitorDefinitionCard values={values} plugins={plugins} />
+          <MonitorType values={values} isServerless={isServerless} />
+        </div>
+      )}
+
+      {!flyoutMode && displayMonitorDefinitionCards ? (
+        <div>
+          <EuiSpacer size="m" />
+          <MonitorDefinitionCard values={values} plugins={plugins} isServerless={isServerless} />
         </div>
       ) : null}
 
       {isAd ? (
         <div>
-          <EuiSpacer size="l" />
+          {!flyoutMode && <EuiSpacer size="l" />}
           {anomalyDetectorContent.content}
+          {flyoutMode && <EuiSpacer size="m" />}
         </div>
       ) : null}
 
-      <EuiSpacer size="l" />
-      <Schedule isAd={isAd} />
-    </ContentPanel>
+      {values.preventVisualEditor && (
+        <Fragment>
+          <EuiSpacer size={'l'} />
+          <EuiCallOut
+            title="You have advanced configurations not supported by the visual editor"
+            iconType="iInCircle"
+            color={'warning'}
+          >
+            <p>
+              To view or modify all of your configurations, switch to the Extraction query editor.
+            </p>
+          </EuiCallOut>
+        </Fragment>
+      )}
+      {!flyoutMode && <EuiSpacer size="l" />}
+      {values.monitor_type !== MONITOR_TYPE.COMPOSITE_LEVEL && !isPpl ? (
+        <Schedule isAd={isAd} flyoutMode={flyoutMode} />
+      ) : null}
+    </Container>
   );
 };
 

@@ -5,7 +5,14 @@
 
 import React from 'react';
 import PropTypes from 'prop-types';
-import { EuiBasicTable, EuiHorizontalRule, EuiCallOut } from '@elastic/eui';
+import {
+  EuiBasicTable,
+  EuiCallOut,
+  EuiHorizontalRule,
+  EuiSpacer,
+  EuiText,
+  EuiTitle,
+} from '@elastic/eui';
 import queryString from 'query-string';
 import _ from 'lodash';
 import ContentPanel from '../../../../components/ContentPanel';
@@ -15,7 +22,7 @@ import {
   DestinationsControls,
   DeleteConfirmation,
 } from '../../components/DestinationsList';
-import { staticColumns, MAX_DESTINATIONS } from './utils/constants';
+import { staticColumns } from './utils/constants';
 import { getURLQueryParams } from './utils/helpers';
 import { isDeleteAllowedQuery } from './utils/deleteHelpers';
 import { INDEX } from '../../../../../utils/constants';
@@ -26,7 +33,9 @@ import { getAllowList } from '../../utils/helpers';
 import { DESTINATION_TYPE } from '../../utils/constants';
 import { backendErrorNotification } from '../../../../utils/helpers';
 import NotificationsInfoCallOut from '../../components/NotificationsInfoCallOut';
-import NotificationsCallOut from '../../../CreateTrigger/components/NotificationsCallOut';
+import FullPageNotificationsInfoCallOut from '../../components/FullPageNotificationsInfoCallOut';
+import { getDataSourceQueryObj } from '../../../utils/helpers';
+import { isServerlessDataSource } from '../../../../services';
 
 class DestinationsList extends React.Component {
   constructor(props) {
@@ -56,6 +65,8 @@ class DestinationsList extends React.Component {
       showManageEmailGroups: false,
       hasNotificationPlugin: false,
     };
+
+    this.dataSourceQuery = getDataSourceQueryObj();
 
     this.columns = [
       ...staticColumns,
@@ -102,7 +113,10 @@ class DestinationsList extends React.Component {
   async getPlugins() {
     const { httpClient } = this.props;
     try {
-      const pluginsResponse = await httpClient.get('../api/alerting/_plugins');
+      const pluginsResponse = await httpClient.get(
+        '../api/alerting/_plugins',
+        this.dataSourceQuery
+      );
       if (pluginsResponse.ok) {
         const plugins = pluginsResponse.resp.map((plugin) => plugin.component);
         const hasNotificationPlugin = plugins.indexOf(OS_NOTIFICATION_PLUGIN) !== -1;
@@ -128,7 +142,9 @@ class DestinationsList extends React.Component {
     };
     const resp = await httpClient.post('../api/alerting/monitors/_search', {
       body: JSON.stringify(requestBody),
+      query: this.dataSourceQuery?.query,
     });
+
     const total = _.get(resp, 'resp.hits.total.value');
     return total === 0;
   };
@@ -158,7 +174,10 @@ class DestinationsList extends React.Component {
     const { id: destinationId } = this.state.destinationToDelete;
     const { httpClient, notifications } = this.props;
     try {
-      const resp = await httpClient.delete(`../api/alerting/destinations/${destinationId}`);
+      const resp = await httpClient.delete(
+        `../api/alerting/destinations/${destinationId}`,
+        this.dataSourceQuery
+      );
       if (resp.ok) {
         await this.getDestinations();
       } else {
@@ -213,9 +232,10 @@ class DestinationsList extends React.Component {
         ...this.props.location,
         search: queryParms,
       });
+
       try {
         const resp = await httpClient.get('../api/alerting/destinations', {
-          query: { from, ...params },
+          query: { from, ...params, ...this.dataSourceQuery?.query },
         });
         if (resp.ok) {
           this.setState({
@@ -279,6 +299,7 @@ class DestinationsList extends React.Component {
   render() {
     const { httpClient, notifications } = this.props;
     const {
+      destinations,
       destinationToDelete,
       page,
       queryParams: { size, search, type, sortDirection, sortField },
@@ -292,7 +313,7 @@ class DestinationsList extends React.Component {
     const pagination = {
       pageIndex: page,
       pageSize: size,
-      totalItemCount: Math.min(MAX_DESTINATIONS, totalDestinations),
+      totalItemCount: totalDestinations,
       pageSizeOptions: [5, 10, 20, 50],
     };
     const sorting = {
@@ -301,6 +322,10 @@ class DestinationsList extends React.Component {
         field: sortField,
       },
     };
+
+    // Alerting plugin destinations are not supported on serverless data sources. Always redirect to notifications plugin.
+    const isServerless = isServerlessDataSource();
+
     return (
       <React.Fragment>
         {destinationConsumedByOthers ? (
@@ -310,80 +335,106 @@ class DestinationsList extends React.Component {
             color="danger"
           />
         ) : null}
-        <NotificationsInfoCallOut hasNotificationPlugin={hasNotificationPlugin} />
-        {!hasNotificationPlugin && <NotificationsCallOut />}
-        <ContentPanel
-          bodyStyles={{ padding: 'initial' }}
-          title="Destinations (deprecated)"
-          actions={
-            <DestinationsActions
-              isEmailAllowed={this.isEmailAllowed()}
-              onClickManageSenders={() => {
-                this.setState({ showManageSenders: true });
-              }}
-              onClickManageEmailGroups={() => {
-                this.setState({ showManageEmailGroups: true });
-              }}
-            />
-          }
-        >
-          <DeleteConfirmation
-            isVisible={this.state.showDeleteConfirmation}
-            onCancel={() => {
-              this.setState({ showDeleteConfirmation: false });
-            }}
-            onConfirm={this.handleDeleteDestination}
-          />
 
-          <ManageSenders
-            httpClient={httpClient}
-            isEmailAllowed={this.isEmailAllowed()}
-            isVisible={this.state.showManageSenders}
-            onClickCancel={this.hideManageSendersModal}
-            onClickSave={this.hideManageSendersModal}
-            notifications={notifications}
-          />
-
-          <ManageEmailGroups
-            httpClient={httpClient}
-            isEmailAllowed={this.isEmailAllowed()}
-            isVisible={this.state.showManageEmailGroups}
-            onClickCancel={this.hideManageEmailGroupsModal}
-            onClickSave={this.hideManageEmailGroupsModal}
-            notifications={notifications}
-          />
-
-          <DestinationsControls
-            activePage={page}
-            pageCount={Math.ceil(totalDestinations / size) || 1}
-            search={search}
-            type={type}
-            onSearchChange={this.handleSearchChange}
-            onTypeChange={this.handleTypeChange}
-            onPageClick={this.handlePageClick}
-            allowList={allowList}
-          />
-          <EuiHorizontalRule margin="xs" />
-          <EuiBasicTable
-            columns={this.columns}
-            hasActions={true}
-            isSelectable={true}
-            items={this.state.destinations}
-            pagination={pagination}
-            noItemsMessage={
-              isDestinationLoading ? (
-                'Loading destinations...'
-              ) : (
-                <EmptyDestinations
-                  isFilterApplied={isFilterApplied}
-                  onResetFilters={this.handleResetFilter}
+        {!isServerless && (isDestinationLoading || totalDestinations > 0 || isFilterApplied) ? (
+          <div>
+            <EuiTitle size={'l'}>
+              <h3>Destinations (deprecated)</h3>
+            </EuiTitle>
+            <EuiSpacer size={'l'} />
+            <NotificationsInfoCallOut hasNotificationPlugin={hasNotificationPlugin} />
+            <ContentPanel
+              bodyStyles={{ padding: 'initial' }}
+              title={
+                <div>
+                  <EuiTitle size={'s'} style={{ paddingBottom: '0px', marginBottom: '0px' }}>
+                    <h3>Destinations pending for migration</h3>
+                  </EuiTitle>
+                  {hasNotificationPlugin ? (
+                    <EuiText
+                      color={'subdued'}
+                      size={'s'}
+                      style={{ paddingTop: '0px', marginTop: '0px' }}
+                    >
+                      Destinations that are pending migration will continue to work.
+                    </EuiText>
+                  ) : null}
+                </div>
+              }
+              actions={
+                <DestinationsActions
+                  isEmailAllowed={this.isEmailAllowed()}
+                  onClickManageSenders={() => {
+                    this.setState({ showManageSenders: true });
+                  }}
+                  onClickManageEmailGroups={() => {
+                    this.setState({ showManageEmailGroups: true });
+                  }}
                 />
-              )
-            }
-            onChange={this.handlePageChange}
-            sorting={sorting}
-          />
-        </ContentPanel>
+              }
+            >
+              <DeleteConfirmation
+                isVisible={this.state.showDeleteConfirmation}
+                onCancel={() => {
+                  this.setState({ showDeleteConfirmation: false });
+                }}
+                onConfirm={this.handleDeleteDestination}
+              />
+
+              <ManageSenders
+                httpClient={httpClient}
+                isEmailAllowed={this.isEmailAllowed()}
+                isVisible={this.state.showManageSenders}
+                onClickCancel={this.hideManageSendersModal}
+                onClickSave={this.hideManageSendersModal}
+                notifications={notifications}
+              />
+
+              <ManageEmailGroups
+                httpClient={httpClient}
+                isEmailAllowed={this.isEmailAllowed()}
+                isVisible={this.state.showManageEmailGroups}
+                onClickCancel={this.hideManageEmailGroupsModal}
+                onClickSave={this.hideManageEmailGroupsModal}
+                notifications={notifications}
+              />
+
+              <DestinationsControls
+                activePage={page}
+                pageCount={Math.ceil(totalDestinations / size) || 1}
+                search={search}
+                type={type}
+                onSearchChange={this.handleSearchChange}
+                onTypeChange={this.handleTypeChange}
+                onPageClick={this.handlePageClick}
+                allowList={allowList}
+              />
+              <EuiHorizontalRule margin="xs" />
+              <EuiBasicTable
+                columns={this.columns}
+                hasActions={true}
+                isSelectable={true}
+                items={destinations}
+                pagination={pagination}
+                noItemsMessage={
+                  isDestinationLoading ? (
+                    'Loading destinations...'
+                  ) : (
+                    <EmptyDestinations
+                      hasNotificationPlugin={hasNotificationPlugin}
+                      isFilterApplied={isFilterApplied}
+                      onResetFilters={this.handleResetFilter}
+                    />
+                  )
+                }
+                onChange={this.handlePageChange}
+                sorting={sorting}
+              />
+            </ContentPanel>
+          </div>
+        ) : (
+          <FullPageNotificationsInfoCallOut hasNotificationPlugin={hasNotificationPlugin} />
+        )}
       </React.Fragment>
     );
   }

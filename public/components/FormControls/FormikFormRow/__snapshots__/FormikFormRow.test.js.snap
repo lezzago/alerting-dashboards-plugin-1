@@ -1,8 +1,8 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`FormikFormRow renders 1`] = `
 <div
-  class="euiFormRow"
+  class="euiFormRow euiFormRow--compressed"
   id="testing-form-row-row"
 >
   <div

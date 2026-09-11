@@ -9,7 +9,9 @@ import { get } from 'lodash';
 import { FormikComboBox } from '../../../../components/FormControls';
 import { hasError, isInvalid, validateDetector } from '../../../../utils/validate';
 import { CoreContext } from '../../../../utils/CoreContext';
-import { backendErrorNotification } from '../../../../utils/helpers';
+import FormikFieldText from '../../../../components/FormControls/FormikFieldText';
+import { getClient } from '../../../../services';
+import { getDataSourceQueryObj } from '../../../utils/helpers';
 
 class AnomalyDetectors extends React.Component {
   static contextType = CoreContext;
@@ -18,6 +20,7 @@ class AnomalyDetectors extends React.Component {
     this.state = {
       detectorOptions: [],
       isLoading: false,
+      lastFetchedDataSourceId: undefined,
     };
     this.searchDetectors = this.searchDetectors.bind(this);
   }
@@ -25,10 +28,33 @@ class AnomalyDetectors extends React.Component {
     await this.searchDetectors();
   }
 
+  async componentDidUpdate(prevProps) {
+    if (prevProps.landingDataSourceId !== this.props.landingDataSourceId) {
+      await this.searchDetectors();
+    }
+  }
+
   async searchDetectors() {
-    const { http: httpClient, notifications } = this.context;
+    const httpClient = getClient();
     try {
-      const response = await httpClient.post('../api/alerting/detectors/_search');
+      // Prefer the landing dataSourceId when available.
+      // Fallback to the global helper
+      const dataSourceQuery = this.props.landingDataSourceId
+        ? { query: { dataSourceId: this.props.landingDataSourceId } }
+        : getDataSourceQueryObj();
+
+      // Avoid refetching if we're already fetched for this dataSourceId
+      const currentDataSourceId = dataSourceQuery?.query?.dataSourceId;
+      if (
+        this.state.lastFetchedDataSourceId === currentDataSourceId &&
+        this.state.detectorOptions.length
+      ) {
+        return;
+      }
+
+      const response = await httpClient.post('../api/alerting/detectors/_search', {
+        query: dataSourceQuery?.query,
+      });
       if (response.ok) {
         const detectorOptions = response.detectors
           .filter((detector) => detector.detectionDateRange === undefined)
@@ -39,7 +65,7 @@ class AnomalyDetectors extends React.Component {
             interval: detector.detectionInterval,
             resultIndex: detector.resultIndex,
           }));
-        this.setState({ detectorOptions });
+        this.setState({ detectorOptions, lastFetchedDataSourceId: currentDataSourceId });
       } else {
         // TODO: 'response.ok' is 'false' when there is no anomaly-detection config index in the cluster, and notification should not be shown to new Anomaly-Detection users
         // backendErrorNotification(notifications, 'get', 'detectors', response.resp);
@@ -51,53 +77,71 @@ class AnomalyDetectors extends React.Component {
 
   render() {
     const { detectorOptions } = this.state;
-    const { values, detectorId } = this.props;
+    const { values, detectorId, flyoutMode } = this.props;
     //Default to empty
     let selectedOptions = [];
+    let detectorName = '';
     if (detectorOptions.length > 0) {
       const adId = values.detectorId ? values.detectorId : detectorId;
       const selectedValue = detectorOptions.find((detector) => adId === detector.value);
       if (selectedValue) {
         selectedOptions = [selectedValue];
+        detectorName = selectedValue.label;
       }
     }
+
     return (
       <div
         style={{
-          maxWidth: '390px',
+          maxWidth: flyoutMode ? '400px' : '390px',
         }}
       >
-        <FormikComboBox
-          name={'detectorId'}
-          formRow
-          rowProps={{
-            label: 'Detector',
-            isInvalid,
-            error: hasError,
-          }}
-          fieldProps={{
-            validate: (value) => validateDetector(value, selectedOptions[0]),
-          }}
-          inputProps={{
-            placeholder: 'Select a detector',
-            options: detectorOptions,
-            onBlur: (e, field, form) => {
-              form.setFieldTouched('detectorId', true);
-            },
-            onChange: (options, field, form) => {
-              form.setFieldError('detectorId', undefined);
-              form.setFieldValue('detectorId', get(options, '0.value', ''));
-              form.setFieldValue('period', {
-                interval: 2 * get(options, '0.interval.period.interval'),
-                unit: get(options, '0.interval.period.unit', 'MINUTES').toUpperCase(),
-              });
-              form.setFieldValue('adResultIndex', get(options, '0.resultIndex'));
-            },
-            singleSelection: { asPlaintext: true },
-            isClearable: false,
-            selectedOptions,
-          }}
-        />
+        {!flyoutMode && (
+          <FormikComboBox
+            name={'detectorId'}
+            formRow
+            rowProps={{
+              label: 'Detector',
+              isInvalid,
+              error: hasError,
+            }}
+            fieldProps={{
+              validate: (value) => validateDetector(value, selectedOptions[0]),
+            }}
+            inputProps={{
+              placeholder: 'Select a detector',
+              options: detectorOptions,
+              onBlur: (e, field, form) => {
+                form.setFieldTouched('detectorId', true);
+              },
+              onChange: (options, field, form) => {
+                form.setFieldError('detectorId', undefined);
+                form.setFieldValue('detectorId', get(options, '0.value', ''));
+                form.setFieldValue('period', {
+                  interval: 2 * get(options, '0.interval.period.interval'),
+                  unit: get(options, '0.interval.period.unit', 'MINUTES').toUpperCase(),
+                });
+                form.setFieldValue('adResultIndex', get(options, '0.resultIndex'));
+              },
+              singleSelection: { asPlaintext: true },
+              isClearable: false,
+              selectedOptions,
+            }}
+          />
+        )}
+        {flyoutMode && (
+          <FormikFieldText
+            name="Detector"
+            formRow
+            rowProps={{
+              label: 'Detector',
+            }}
+            inputProps={{
+              value: detectorName,
+              disabled: true,
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -106,6 +150,7 @@ class AnomalyDetectors extends React.Component {
 AnomalyDetectors.propTypes = {
   values: PropTypes.object.isRequired,
   renderEmptyMessage: PropTypes.func.isRequired,
+  landingDataSourceId: PropTypes.string,
 };
 
 export default AnomalyDetectors;

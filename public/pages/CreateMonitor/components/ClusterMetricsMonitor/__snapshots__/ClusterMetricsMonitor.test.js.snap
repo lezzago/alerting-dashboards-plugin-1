@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`ClusterMetricsMonitor renders 1`] = `
 <div>
@@ -6,7 +6,7 @@ exports[`ClusterMetricsMonitor renders 1`] = `
     class="euiSpacer euiSpacer--m"
   />
   <div
-    class="euiFormRow"
+    class="euiFormRow euiFormRow--compressed"
     id="uri.api_type-form-row-row"
   >
     <div
@@ -42,6 +42,11 @@ exports[`ClusterMetricsMonitor renders 1`] = `
                 <div>
                   EuiIconMock
                 </div>
+                <span
+                  class="euiScreenReaderOnly"
+                >
+                  (opens in a new tab or window)
+                </span>
               </a>
             </div>
           </div>
@@ -54,19 +59,19 @@ exports[`ClusterMetricsMonitor renders 1`] = `
       <div
         aria-expanded="false"
         aria-haspopup="listbox"
-        class="euiComboBox"
+        class="euiComboBox euiComboBox--compressed"
         data-test-subj="clusterMetricsApiTypeComboBox"
         name="uri.api_type"
         role="combobox"
       >
         <div
-          class="euiFormControlLayout"
+          class="euiFormControlLayout euiFormControlLayout--compressed"
         >
           <div
             class="euiFormControlLayout__childrenWrapper"
           >
             <div
-              class="euiComboBox__inputWrap euiComboBox__inputWrap--noWrap"
+              class="euiComboBox__inputWrap euiComboBox__inputWrap--compressed euiComboBox__inputWrap--noWrap"
               data-test-subj="comboBoxInput"
               tabindex="-1"
             >
@@ -134,7 +139,7 @@ exports[`ClusterMetricsMonitor renders 1`] = `
     class="euiSpacer euiSpacer--l"
   />
   <div
-    class="euiFormRow euiFormRow--fullWidth"
+    class="euiFormRow euiFormRow--fullWidth euiFormRow--compressed"
     id="generated-id-row"
   >
     <div
@@ -155,12 +160,10 @@ exports[`ClusterMetricsMonitor renders 1`] = `
         data-test-subj="clusterMetricsRunResponseBox"
         style="width:100%;height:500px"
       >
-        <div
+        <button
           class="euiCodeEditorKeyboardHint"
           data-test-subj="codeEditorHint"
           id="generated-id"
-          role="button"
-          tabindex="0"
         >
           <p
             class="euiText"
@@ -172,7 +175,7 @@ exports[`ClusterMetricsMonitor renders 1`] = `
           >
             When you're done, press Escape to stop editing.
           </p>
-        </div>
+        </button>
         <div
           id="generated-id"
           style="width:100%;height:500px"

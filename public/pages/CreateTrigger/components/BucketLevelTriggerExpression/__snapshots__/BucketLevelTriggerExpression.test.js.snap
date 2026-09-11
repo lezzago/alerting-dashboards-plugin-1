@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`BucketLevelTriggerExpression renders 1`] = `
 <EuiFlexGroup
@@ -68,12 +68,12 @@ exports[`BucketLevelTriggerExpression renders 1`] = `
   <EuiFlexItem
     grow={false}
   >
-    <EuiButton
+    <EuiSmallButton
       color="danger"
       onClick={[Function]}
     >
       Remove condition
-    </EuiButton>
+    </EuiSmallButton>
   </EuiFlexItem>
 </EuiFlexGroup>
 `;

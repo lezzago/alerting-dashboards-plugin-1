@@ -6,12 +6,13 @@
 import React, { useState } from 'react';
 import _ from 'lodash';
 import {
+  EuiSmallButton,
   EuiButton,
-  EuiButtonEmpty,
+  EuiSmallButtonEmpty,
   EuiCodeEditor,
   EuiFlexGroup,
   EuiFlexItem,
-  EuiFormRow,
+  EuiCompressedFormRow,
   EuiLink,
   EuiModal,
   EuiModalBody,
@@ -72,17 +73,17 @@ const renderModal = (closeModal, prevApiType, selectedApiType, form) => {
         <EuiModalFooter>
           <EuiFlexGroup justifyContent={'flexEnd'}>
             <EuiFlexItem grow={false}>
-              <EuiButtonEmpty
+              <EuiSmallButtonEmpty
                 fullWidth={false}
                 onClick={onKeep}
                 data-test-subj={'clusterMetricsClearTriggersModalKeepButton'}
               >
                 Keep
-              </EuiButtonEmpty>
+              </EuiSmallButtonEmpty>
             </EuiFlexItem>
 
             <EuiFlexItem grow={false}>
-              <EuiButton
+              <EuiSmallButton
                 color={'danger'}
                 fill={true}
                 fullWidth={false}
@@ -90,7 +91,7 @@ const renderModal = (closeModal, prevApiType, selectedApiType, form) => {
                 data-test-subj={'clusterMetricsClearTriggersModalClearButton'}
               >
                 Clear
-              </EuiButton>
+              </EuiSmallButton>
             </EuiFlexItem>
           </EuiFlexGroup>
         </EuiModalFooter>
@@ -211,7 +212,7 @@ const ClusterMetricsMonitor = ({
               label: (
                 <div>
                   <EuiText size={'xs'}>
-                    <strong>Query parameters</strong>
+                    <strong>Path parameters</strong>
                     {!requirePathParams && <i> - optional </i>}
                   </EuiText>
                   <EuiText color={'subdued'} size={'xs'}>
@@ -243,7 +244,7 @@ const ClusterMetricsMonitor = ({
                   size={'s'}
                   style={{ backgroundColor: 'transparent', paddingRight: !hidePathParams && '0px' }}
                 >
-                  GET {_.get(API_TYPES, `${apiType}.prependText`)}
+                  GET {'/' + _.get(API_TYPES, `${apiType}.prependText`) + '/'}
                 </EuiText>
               ),
               append: !_.isEmpty(_.get(API_TYPES, `${apiType}.appendText`)) && (
@@ -275,7 +276,7 @@ const ClusterMetricsMonitor = ({
 
       <EuiSpacer size={'l'} />
 
-      <EuiFormRow label={'Response'} fullWidth={true}>
+      <EuiCompressedFormRow label={'Response'} fullWidth={true}>
         <EuiCodeEditor
           mode={'json'}
           theme={isDarkMode ? 'sense-dark' : 'github'}
@@ -285,7 +286,7 @@ const ClusterMetricsMonitor = ({
           readOnly
           data-test-subj={'clusterMetricsRunResponseBox'}
         />
-      </EuiFormRow>
+      </EuiCompressedFormRow>
     </div>
   );
 };

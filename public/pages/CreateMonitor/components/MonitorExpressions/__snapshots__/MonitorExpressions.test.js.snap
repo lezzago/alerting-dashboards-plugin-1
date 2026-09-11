@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`MonitorExpressions renders 1`] = `
 <div>
@@ -110,20 +110,20 @@ exports[`MonitorExpressions renders 1`] = `
         style="width:150px"
       >
         <div
-          class="euiFormRow"
+          class="euiFormRow euiFormRow--compressed"
           id="bucketValue-form-row-row"
         >
           <div
             class="euiFormRow__fieldWrapper"
           >
             <div
-              class="euiFormControlLayout"
+              class="euiFormControlLayout euiFormControlLayout--compressed"
             >
               <div
                 class="euiFormControlLayout__childrenWrapper"
               >
                 <input
-                  class="euiFieldNumber"
+                  class="euiFieldNumber euiFieldNumber--compressed"
                   min="1"
                   name="bucketValue"
                   type="number"
@@ -139,13 +139,13 @@ exports[`MonitorExpressions renders 1`] = `
         style="width:150px"
       >
         <div
-          class="euiFormControlLayout"
+          class="euiFormControlLayout euiFormControlLayout--compressed"
         >
           <div
             class="euiFormControlLayout__childrenWrapper"
           >
             <select
-              class="euiSelect"
+              class="euiSelect euiSelect--compressed"
               id="bucketUnitOfTime"
               name="bucketUnitOfTime"
             >
@@ -212,31 +212,34 @@ exports[`MonitorExpressions renders 1`] = `
       >
         No filters defined.
       </div>
-    </div>
-    <button
-      class="euiButtonEmpty euiButtonEmpty--primary euiButtonEmpty--xSmall"
-      data-test-subj="where.addFilterButton"
-      style="padding-top:5px"
-      type="button"
-    >
-      <span
-        class="euiButtonContent euiButtonEmpty__content"
+      <div
+        class="euiSpacer euiSpacer--xs"
+      />
+      <button
+        class="euiButtonEmpty euiButtonEmpty--primary euiButtonEmpty--xSmall"
+        data-test-subj="addFilterButton"
+        style="padding-top:5px"
+        type="button"
       >
         <span
-          class="euiButtonEmpty__text"
+          class="euiButtonContent euiButtonEmpty__content"
         >
-          + Add filter
+          <span
+            class="euiButtonEmpty__text"
+          >
+            + Add filter
+          </span>
         </span>
-      </span>
-    </button>
-    <div
-      class="euiText euiText--extraSmall"
-      style="padding-left:10px"
-    >
+      </button>
       <div
-        class="euiTextColor euiTextColor--subdued"
+        class="euiText euiText--extraSmall"
+        style="padding-left:10px"
       >
-        You can add up to 1  data filter.
+        <div
+          class="euiTextColor euiTextColor--subdued"
+        >
+          You can add up to 10 more data filters.
+        </div>
       </div>
     </div>
   </div>

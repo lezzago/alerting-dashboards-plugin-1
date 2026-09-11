@@ -3,18 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import _ from 'lodash';
-import Mustache from 'mustache';
+import { Field } from 'formik';
 import {
-  EuiCheckbox,
   EuiFlexGroup,
   EuiFlexItem,
-  EuiFormRow,
+  EuiCompressedFormRow,
   EuiLink,
   EuiSpacer,
   EuiText,
-  EuiTextArea,
 } from '@elastic/eui';
 
 import {
@@ -34,6 +32,7 @@ import {
 } from '../../../../../utils/validate';
 import { URL, MAX_THROTTLE_VALUE, WRONG_THROTTLE_WARNING } from '../../../../../../utils/constants';
 import { MONITOR_TYPE } from '../../../../../utils/constants';
+import MustacheAutocompleteTextArea from '../../../../../components/MustacheAutocompleteTextArea/MustacheAutocompleteTextArea';
 import OverviewStat from '../../../../MonitorDetails/components/OverviewStat';
 
 export const NOTIFY_OPTIONS_VALUES = {
@@ -86,49 +85,6 @@ export const DEFAULT_ACTIONABLE_ALERTS_SELECTIONS = [
 
 export const NO_ACTIONABLE_ALERT_SELECTIONS = 'Must select at least 1 option.';
 
-const renderSendTestMessageButton = (
-  index,
-  sendTestMessage,
-  isBucketLevelMonitor,
-  displayPreview,
-  setDisplayPreview,
-  fieldPath
-) => {
-  return (
-    <EuiFlexGroup justifyContent="spaceBetween" alignItems="flexStart">
-      <EuiFlexItem>
-        <EuiCheckbox
-          id={`${fieldPath}actions.${index}`}
-          label={'Preview message'}
-          checked={displayPreview}
-          onChange={(e) => setDisplayPreview(e)}
-        />
-      </EuiFlexItem>
-      <EuiFlexItem grow={false}>
-        <EuiFlexGroup alignItems="flexEnd" direction="column" gutterSize="xs">
-          <EuiFlexItem grow={false}>
-            <EuiLink
-              onClick={() => {
-                sendTestMessage(index);
-              }}
-            >
-              <EuiText>Send test message</EuiText>
-            </EuiLink>
-          </EuiFlexItem>
-          {isBucketLevelMonitor ? (
-            <EuiFlexItem>
-              <EuiText size="xs">
-                For bucket-level triggers, at least one bucket of data is required from the monitor
-                input query.
-              </EuiText>
-            </EuiFlexItem>
-          ) : null}
-        </EuiFlexGroup>
-      </EuiFlexItem>
-    </EuiFlexGroup>
-  );
-};
-
 const validateActionableAlertsSelections = (options) => {
   if (!_.isArray(options) || _.isEmpty(options)) return NO_ACTIONABLE_ALERT_SELECTIONS;
 };
@@ -137,53 +93,68 @@ export default function Message(
   { action, context, index, isSubjectDisabled = false, sendTestMessage, fieldPath, values } = this
     .props
 ) {
-  const [displayPreview, setDisplayPreview] = useState(false);
-  const onDisplayPreviewChange = (e) => setDisplayPreview(e.target.checked);
-  const isBucketLevelMonitor =
-    _.get(context, 'ctx.monitor.monitor_type', MONITOR_TYPE.QUERY_LEVEL) ===
-    MONITOR_TYPE.BUCKET_LEVEL;
+  const monitorType = _.get(context, 'ctx.monitor.monitor_type', MONITOR_TYPE.QUERY_LEVEL);
+  const editableActionExecutionPolicy =
+    monitorType === MONITOR_TYPE.BUCKET_LEVEL || monitorType === MONITOR_TYPE.DOC_LEVEL;
+
   const actionPath = `${fieldPath}actions.${index}`;
-  const actionExecutionPolicyPath = isBucketLevelMonitor
+  const actionExecutionPolicyPath = editableActionExecutionPolicy
     ? `${actionPath}.action_execution_policy`
     : actionPath;
+  const actionableAlertsSelectionsPath = `${actionExecutionPolicyPath}.action_execution_scope.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`;
 
-  let actionExecutionScopeId = isBucketLevelMonitor
-    ? _.get(
-        action,
-        'action_execution_policy.action_execution_scope',
-        NOTIFY_OPTIONS_VALUES.PER_ALERT
-      )
+  let defaultNotifyOption;
+  switch (monitorType) {
+    case MONITOR_TYPE.BUCKET_LEVEL:
+      defaultNotifyOption = NOTIFY_OPTIONS_VALUES.PER_ALERT;
+      break;
+    case MONITOR_TYPE.DOC_LEVEL:
+      defaultNotifyOption = NOTIFY_OPTIONS_VALUES.PER_EXECUTION;
+      break;
+    default:
+      defaultNotifyOption = NOTIFY_OPTIONS_VALUES.PER_EXECUTION;
+  }
+  let actionExecutionScopeId = editableActionExecutionPolicy
+    ? _.get(action, 'action_execution_policy.action_execution_scope', defaultNotifyOption)
     : '';
   if (!_.isString(actionExecutionScopeId))
     actionExecutionScopeId = _.keys(actionExecutionScopeId)[0];
 
-  let actionableAlertsSelections = _.get(
-    values,
-    `${actionExecutionPolicyPath}.action_execution_scope.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`
-  );
+  let actionableAlertsSelections;
+  let displayActionableAlertsOptions;
+  let displayThrottlingSettings;
+  switch (monitorType) {
+    case MONITOR_TYPE.BUCKET_LEVEL:
+      displayActionableAlertsOptions = true;
+      displayThrottlingSettings = actionExecutionScopeId === NOTIFY_OPTIONS_VALUES.PER_ALERT;
+      actionableAlertsSelections = _.get(values, actionableAlertsSelectionsPath);
+      break;
+    case MONITOR_TYPE.DOC_LEVEL:
+      displayActionableAlertsOptions = false;
+      displayThrottlingSettings = false;
+      actionableAlertsSelections = [];
+      _.set(action, 'action_execution_policy.action_execution_scope', actionExecutionScopeId);
+      break;
+    case MONITOR_TYPE.COMPOSITE_LEVEL:
+      displayActionableAlertsOptions = false;
+      displayThrottlingSettings = true;
+      break;
+    default:
+      displayActionableAlertsOptions = false;
+      displayThrottlingSettings = actionExecutionScopeId !== NOTIFY_OPTIONS_VALUES.PER_EXECUTION;
+  }
 
   if (actionExecutionScopeId === NOTIFY_OPTIONS_VALUES.PER_ALERT) {
-    if (_.get(values, `${actionPath}.throttle.value`) === undefined) {
+    if (_.get(values, `${actionPath}.throttle.value`) === undefined)
       _.set(values, `${actionPath}.throttle.value`, 10);
-    }
 
-    if (actionableAlertsSelections === undefined) {
-      _.set(
-        values,
-        `${actionExecutionPolicyPath}.action_execution_scope.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`,
-        DEFAULT_ACTIONABLE_ALERTS_SELECTIONS
-      );
+    if (actionableAlertsSelections === undefined)
       actionableAlertsSelections = DEFAULT_ACTIONABLE_ALERTS_SELECTIONS;
-    }
+    _.set(values, actionableAlertsSelectionsPath, actionableAlertsSelections);
   }
 
-  let preview = '';
-  try {
-    preview = Mustache.render(action.message_template.source, context);
-  } catch (err) {
-    preview = err.message;
-    console.error('There was an error rendering mustache template', err);
-  }
+  if (!displayThrottlingSettings) _.set(values, `${actionPath}.throttle_enabled`, false);
+
   return (
     <div>
       {!isSubjectDisabled ? (
@@ -204,57 +175,60 @@ export default function Message(
           }}
         />
       ) : null}
-      <FormikTextArea
-        name={`${fieldPath}actions.${index}.message_template.source`}
-        formRow
-        fieldProps={{ validate: required }}
-        rowProps={{
-          label: (
-            <div>
-              <EuiText size={'xs'} style={{ paddingBottom: '0px', marginBottom: '0px' }}>
-                <h4>Message</h4>
-              </EuiText>
-              <EuiText color={'subdued'} size={'xs'}>
-                Embed variables in your message using Mustache templates.{' '}
-                <EuiLink external href={URL.MUSTACHE} target="_blank">
-                  Learn more
-                </EuiLink>
-              </EuiText>
-            </div>
-          ),
-          style: { maxWidth: '100%' },
-          isInvalid,
-          error: hasError,
-        }}
-        inputProps={{
-          placeholder: 'Can use mustache templates',
-          fullWidth: true,
-          isInvalid,
-        }}
-      />
-
-      <EuiFormRow style={{ maxWidth: '100%' }}>
-        {renderSendTestMessageButton(
-          index,
-          sendTestMessage,
-          isBucketLevelMonitor,
-          displayPreview,
-          onDisplayPreviewChange,
-          fieldPath
-        )}
-      </EuiFormRow>
-
-      {displayPreview ? (
-        <EuiFormRow label="Message preview" style={{ maxWidth: '100%' }}>
-          <EuiTextArea
-            placeholder="Preview of mustache template"
+      <Field name={`${fieldPath}actions.${index}.message_template.source`} validate={required}>
+        {({ field, form, meta }) => (
+          <EuiCompressedFormRow
+            label={
+              <div>
+                <EuiText size={'xs'} style={{ paddingBottom: '0px', marginBottom: '0px' }}>
+                  <h4>Message</h4>
+                </EuiText>
+                <EuiText color={'subdued'} size={'xs'}>
+                  Embed variables in your message using Mustache templates.{' '}
+                  <EuiLink external href={URL.MUSTACHE} target="_blank">
+                    Learn more
+                  </EuiLink>
+                </EuiText>
+              </div>
+            }
+            style={{ maxWidth: '100%' }}
             fullWidth
-            value={preview}
-            readOnly
-            className="read-only-text-area"
-          />
-        </EuiFormRow>
-      ) : null}
+            isInvalid={meta.touched && !!meta.error}
+            error={meta.touched && meta.error}
+          >
+            <MustacheAutocompleteTextArea
+              value={field.value || ''}
+              onChange={(e) => form.setFieldValue(field.name, e.target.value)}
+              onBlur={() => form.setFieldTouched(field.name, true)}
+              context={context}
+              placeholder="Can use mustache templates"
+              fullWidth
+            />
+          </EuiCompressedFormRow>
+        )}
+      </Field>
+
+      <EuiCompressedFormRow style={{ maxWidth: '100%' }}>
+        <EuiFlexGroup justifyContent="flexEnd">
+          <EuiFlexItem grow={false}>
+            <EuiFlexGroup alignItems="flexEnd" direction="column" gutterSize="xs">
+              <EuiFlexItem grow={false}>
+                <EuiLink onClick={() => sendTestMessage(index)}>
+                  <EuiText>Send test message</EuiText>
+                </EuiLink>
+              </EuiFlexItem>
+              {monitorType === MONITOR_TYPE.BUCKET_LEVEL ? (
+                <EuiFlexItem>
+                  <EuiText size="xs">
+                    For bucket-level triggers, at least one bucket of data is required from the
+                    monitor input query.
+                  </EuiText>
+                </EuiFlexItem>
+              ) : null}
+            </EuiFlexGroup>
+          </EuiFlexItem>
+        </EuiFlexGroup>
+      </EuiCompressedFormRow>
 
       <EuiSpacer size="m" />
 
@@ -264,8 +238,8 @@ export default function Message(
 
       <EuiSpacer size="m" />
 
-      {isBucketLevelMonitor ? (
-        <EuiFormRow
+      {editableActionExecutionPolicy ? (
+        <EuiCompressedFormRow
           label={<span style={{ color: '#343741' }}>Perform action</span>}
           style={{ maxWidth: '100%' }}
         >
@@ -279,9 +253,7 @@ export default function Message(
                   value: NOTIFY_OPTIONS_VALUES.PER_EXECUTION,
                   checked: actionExecutionScopeId === NOTIFY_OPTIONS_VALUES.PER_EXECUTION,
                   label: NOTIFY_OPTIONS_LABELS.PER_EXECUTION,
-                  onChange: (e, field, form) => {
-                    field.onChange(e);
-                  },
+                  onChange: (e, field, form) => field.onChange(e),
                 }}
               />
             </EuiFlexItem>
@@ -294,65 +266,51 @@ export default function Message(
                   value: NOTIFY_OPTIONS_VALUES.PER_ALERT,
                   checked: actionExecutionScopeId === NOTIFY_OPTIONS_VALUES.PER_ALERT,
                   label: NOTIFY_OPTIONS_LABELS.PER_ALERT,
-                  onChange: (e, field, form) => {
-                    field.onChange(e);
-                  },
+                  onChange: (e, field, form) => field.onChange(e),
                 }}
               />
             </EuiFlexItem>
 
-            <EuiFlexItem>
-              {actionExecutionScopeId === NOTIFY_OPTIONS_VALUES.PER_ALERT ? (
-                <EuiFormRow style={{ maxWidth: '100%' }}>
-                  <EuiFlexGroup
-                    alignItems="center"
-                    style={{
-                      margin: '0px',
-                      maxWidth: '100%',
+            {actionExecutionScopeId === NOTIFY_OPTIONS_VALUES.PER_ALERT &&
+            displayActionableAlertsOptions ? (
+              <EuiCompressedFormRow style={{ maxWidth: '100%' }}>
+                <EuiFlexGroup
+                  alignItems="center"
+                  style={{
+                    margin: '0px',
+                    maxWidth: '100%',
+                  }}
+                >
+                  <FormikComboBox
+                    name={actionableAlertsSelectionsPath}
+                    formRow
+                    fieldProps={{ validate: validateActionableAlertsSelections }}
+                    rowProps={{
+                      label: 'Actionable alerts',
+                      style: { width: '400px' },
+                      isInvalid:
+                        actionExecutionScopeId === NOTIFY_OPTIONS_VALUES.PER_ALERT &&
+                        _.isEmpty(actionableAlertsSelections),
+                      error: NO_ACTIONABLE_ALERT_SELECTIONS,
                     }}
-                  >
-                    <FormikComboBox
-                      name={`${actionExecutionPolicyPath}.action_execution_scope.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`}
-                      formRow
-                      fieldProps={{ validate: validateActionableAlertsSelections }}
-                      rowProps={{
-                        label: 'Actionable alerts',
-                        style: { width: '400px' },
-                        isInvalid:
-                          actionExecutionScopeId === NOTIFY_OPTIONS_VALUES.PER_ALERT &&
-                          _.isEmpty(
-                            _.get(
-                              action,
-                              `action_execution_policy.action_execution_scope.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`
-                            )
-                          ),
-                        error: NO_ACTIONABLE_ALERT_SELECTIONS,
-                      }}
-                      inputProps={{
-                        placeholder: 'Select alert options',
-                        options: ACTIONABLE_ALERTS_OPTIONS,
-                        onBlur: (e, field, form) => {
-                          form.setFieldTouched(
-                            `${actionExecutionPolicyPath}.action_execution_scope.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`,
-                            true
-                          );
-                        },
-                        onChange: (options, field, form) => {
-                          form.setFieldValue(
-                            `${actionExecutionPolicyPath}.action_execution_scope.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`,
-                            options
-                          );
-                        },
-                        isClearable: true,
-                        selectedOptions: actionableAlertsSelections,
-                      }}
-                    />
-                  </EuiFlexGroup>
-                </EuiFormRow>
-              ) : null}
-            </EuiFlexItem>
+                    inputProps={{
+                      placeholder: 'Select alert options',
+                      options: ACTIONABLE_ALERTS_OPTIONS,
+                      onBlur: (e, field, form) => {
+                        form.setFieldTouched(actionableAlertsSelectionsPath, true);
+                      },
+                      onChange: (options, field, form) => {
+                        form.setFieldValue(actionableAlertsSelectionsPath, options);
+                      },
+                      isClearable: true,
+                      selectedOptions: actionableAlertsSelections,
+                    }}
+                  />
+                </EuiFlexGroup>
+              </EuiCompressedFormRow>
+            ) : null}
           </EuiFlexGroup>
-        </EuiFormRow>
+        </EuiCompressedFormRow>
       ) : (
         <div>
           <OverviewStat header={'Perform action'} value={'Per monitor execution'} />
@@ -360,8 +318,11 @@ export default function Message(
         </div>
       )}
 
-      {actionExecutionScopeId !== NOTIFY_OPTIONS_VALUES.PER_EXECUTION ? (
-        <EuiFormRow label={'Throttling'} style={{ paddingBottom: '10px', maxWidth: '100%' }}>
+      {displayThrottlingSettings ? (
+        <EuiCompressedFormRow
+          label={'Throttling'}
+          style={{ paddingBottom: '10px', maxWidth: '100%' }}
+        >
           <EuiFlexGroup direction="column">
             <EuiFlexItem grow={false} style={{ marginBottom: '0px' }}>
               <FormikCheckbox
@@ -374,7 +335,7 @@ export default function Message(
               style={{ margin: '0px', display: _.get(action, `throttle_enabled`) ? '' : 'none' }}
             >
               <EuiFlexItem grow={false} style={{ marginRight: '0px' }}>
-                <EuiFormRow label="Throttle actions to only trigger every">
+                <EuiCompressedFormRow label="Throttle actions to only trigger every">
                   <FormikFieldNumber
                     name={`${actionPath}.throttle.value`}
                     fieldProps={{ validate: validateActionThrottle(action) }}
@@ -402,11 +363,11 @@ export default function Message(
                       disabled: !_.get(action, `throttle_enabled`) ? 'disabled' : '',
                     }}
                   />
-                </EuiFormRow>
+                </EuiCompressedFormRow>
               </EuiFlexItem>
             </EuiFlexGroup>
           </EuiFlexGroup>
-        </EuiFormRow>
+        </EuiCompressedFormRow>
       ) : null}
     </div>
   );

@@ -9,7 +9,7 @@ import queryString from 'query-string';
 import PropTypes from 'prop-types';
 import {
   EuiBasicTable,
-  EuiButton,
+  EuiSmallButton,
   EuiFlexGroup,
   EuiFlexItem,
   EuiHorizontalRule,
@@ -44,7 +44,12 @@ import DashboardControls from '../DashboardControls';
 import ContentPanel from '../../../../components/ContentPanel';
 import { queryColumns } from '../../utils/tableUtils';
 import DashboardEmptyPrompt from '../DashboardEmptyPrompt';
-import { ALERTS_FINDING_COLUMN } from '../FindingsDashboard/utils';
+import { getAlertsFindingColumn } from '../FindingsDashboard/findingsUtils';
+import {
+  appendCommentsAction,
+  getDataSourceId,
+  getIsCommentsEnabled,
+} from '../../../utils/helpers';
 
 export const DEFAULT_NUM_MODAL_ROWS = 10;
 
@@ -53,19 +58,13 @@ export default class AcknowledgeAlertsModal extends Component {
     super(props);
     const { location, monitor_id } = this.props;
 
-    const {
-      alertState,
-      from,
-      search,
-      severityLevel,
-      size,
-      sortDirection,
-      sortField,
-    } = getURLQueryParams(location);
+    const { alertState, from, search, severityLevel, size, sortDirection, sortField } =
+      getURLQueryParams(location);
 
     this.state = {
       alerts: [],
       alertState: alertState,
+      flyoutIsOpen: false,
       loading: true,
       monitors: [],
       monitorIds: [monitor_id],
@@ -77,20 +76,13 @@ export default class AcknowledgeAlertsModal extends Component {
       sortDirection: sortDirection,
       sortField: sortField,
       totalAlerts: 0,
+      commentsEnabled: false,
     };
   }
 
   componentDidMount() {
-    const {
-      alertState,
-      page,
-      search,
-      severityLevel,
-      size,
-      sortDirection,
-      sortField,
-      monitorIds,
-    } = this.state;
+    const { alertState, page, search, severityLevel, size, sortDirection, sortField, monitorIds } =
+      this.state;
     this.getAlerts(
       page * size,
       size,
@@ -101,6 +93,9 @@ export default class AcknowledgeAlertsModal extends Component {
       alertState,
       monitorIds
     );
+    getIsCommentsEnabled(this.props.httpClient).then((commentsEnabled) => {
+      this.setState({ commentsEnabled });
+    });
   }
 
   componentDidUpdate(prevProps, prevState) {
@@ -132,15 +127,8 @@ export default class AcknowledgeAlertsModal extends Component {
 
   getAlerts = async () => {
     this.setState({ ...this.state, loading: true });
-    const {
-      from,
-      search,
-      sortField,
-      sortDirection,
-      severityLevel,
-      alertState,
-      monitorIds,
-    } = this.state;
+    const { from, search, sortField, sortDirection, severityLevel, alertState, monitorIds } =
+      this.state;
 
     const { httpClient, history, notifications, triggerId } = this.props;
 
@@ -158,7 +146,12 @@ export default class AcknowledgeAlertsModal extends Component {
     const queryParamsString = queryString.stringify(params);
     history.replace({ ...this.props.location, search: queryParamsString });
 
-    httpClient.get('../api/alerting/alerts', { query: params }).then((resp) => {
+    const dataSourceId = getDataSourceId();
+    const extendedParams = {
+      ...(dataSourceId !== undefined && { dataSourceId }), // Only include dataSourceId if it exists
+      ...params, // Other parameters
+    };
+    httpClient.get('../api/alerting/alerts', { query: extendedParams }).then((resp) => {
       if (resp.ok) {
         const { alerts } = resp;
         const filteredAlerts = _.filter(alerts, { trigger_id: triggerId });
@@ -183,41 +176,10 @@ export default class AcknowledgeAlertsModal extends Component {
 
     if (!selectedItems.length) return;
 
-    const selectedAlerts = filterActiveAlerts(selectedItems);
+    await this.props.acknowledgeAlerts(selectedItems);
 
-    const monitorAlerts = selectedAlerts.reduce((monitorAlerts, alert) => {
-      const { id, monitor_id: monitorId } = alert;
-      if (monitorAlerts[monitorId]) monitorAlerts[monitorId].push(id);
-      else monitorAlerts[monitorId] = [id];
-      return monitorAlerts;
-    }, {});
-
-    Object.entries(monitorAlerts).map(([monitorId, alerts]) =>
-      httpClient
-        .post(`../api/alerting/monitors/${monitorId}/_acknowledge/alerts`, {
-          body: JSON.stringify({ alerts }),
-        })
-        .then((resp) => {
-          if (!resp.ok) {
-            backendErrorNotification(notifications, 'acknowledge', 'alert', resp.resp);
-          } else {
-            const successfulCount = _.get(resp, 'resp.success', []).length;
-            displayAcknowledgedAlertsToast(notifications, successfulCount);
-          }
-        })
-        .catch((error) => error)
-    );
-
-    const {
-      page,
-      size,
-      search,
-      sortField,
-      sortDirection,
-      severityLevel,
-      alertState,
-      monitorIds,
-    } = this.state;
+    const { page, size, search, sortField, sortDirection, severityLevel, alertState, monitorIds } =
+      this.state;
     await this.getAlerts(
       page * size,
       size,
@@ -269,11 +231,12 @@ export default class AcknowledgeAlertsModal extends Component {
   onCreateTrigger = () => {
     const { history, monitorId, onClose } = this.props;
     onClose();
-    history.push(`/monitors/${monitorId}?action=${MONITOR_ACTIONS.UPDATE_MONITOR}`);
+    history.push(`/monitors/${monitorId}?action=${MONITOR_ACTIONS.EDIT_MONITOR}`);
   };
 
   render() {
-    const { monitor, onClose, triggerName } = this.props;
+    const { httpClient, location, history, monitor, notifications, onClose, triggerName } =
+      this.props;
     const detectorId = _.get(monitor, MONITOR_INPUT_DETECTOR_ID);
     const groupBy = _.get(monitor, MONITOR_GROUP_BY);
     const monitorType = _.get(monitor, 'monitor_type', MONITOR_TYPE.QUERY_LEVEL);
@@ -281,22 +244,22 @@ export default class AcknowledgeAlertsModal extends Component {
     const actions = () => {
       const { selectedItems } = this.state;
       const actions = [
-        <EuiButton
+        <EuiSmallButton
           onClick={this.acknowledgeAlerts}
           disabled={!selectedItems.length}
           data-test-subj={'alertsDashboardModal_acknowledgeAlertsButton'}
         >
           Acknowledge
-        </EuiButton>,
+        </EuiSmallButton>,
       ];
       if (!_.isEmpty(detectorId)) {
         actions.unshift(
-          <EuiButton
+          <EuiSmallButton
             href={`${OPENSEARCH_DASHBOARDS_AD_PLUGIN}#/detectors/${detectorId}`}
             target="_blank"
           >
             View detector <EuiIcon type="popout" />
-          </EuiButton>
+          </EuiSmallButton>
         );
       }
       return actions;
@@ -316,6 +279,7 @@ export default class AcknowledgeAlertsModal extends Component {
     const {
       alerts = [],
       alertState,
+      flyoutIsOpen,
       loading,
       page,
       search,
@@ -326,9 +290,10 @@ export default class AcknowledgeAlertsModal extends Component {
       sortDirection,
       sortField,
       totalAlerts,
+      commentsEnabled,
     } = this.state;
 
-    const columnType = () => {
+    const getColumns = () => {
       let columns;
       switch (monitorType) {
         case MONITOR_TYPE.BUCKET_LEVEL:
@@ -336,13 +301,31 @@ export default class AcknowledgeAlertsModal extends Component {
           break;
         case MONITOR_TYPE.DOC_LEVEL:
           columns = _.cloneDeep(queryColumns);
-          columns.splice(0, 0, ALERTS_FINDING_COLUMN);
+          columns.splice(
+            0,
+            0,
+            getAlertsFindingColumn(
+              httpClient,
+              history,
+              location,
+              notifications,
+              flyoutIsOpen,
+              () => this.setState({ flyoutIsOpen: true }),
+              () => this.setState({ flyoutIsOpen: false })
+            )
+          );
           break;
         default:
           columns = queryColumns;
           break;
       }
-      return removeColumns(['trigger_name'], columns);
+      columns = removeColumns(['trigger_name'], columns);
+
+      if (commentsEnabled) {
+        columns = appendCommentsAction(columns, httpClient);
+      }
+
+      return columns;
     };
 
     const pagination = {
@@ -411,7 +394,7 @@ export default class AcknowledgeAlertsModal extends Component {
                      * $id-$version will correctly remove selected items
                      * */
                     itemId={getItemId}
-                    columns={columnType()}
+                    columns={getColumns()}
                     loading={loading}
                     pagination={pagination}
                     sorting={sorting}
@@ -435,13 +418,13 @@ export default class AcknowledgeAlertsModal extends Component {
             </EuiFlexGroup>
           </EuiModalBody>
           <EuiModalFooter>
-            <EuiButton
+            <EuiSmallButton
               onClick={onClose}
               fill
               data-test-subj={`alertsDashboardModal_closeButton_${triggerName}`}
             >
               Close
-            </EuiButton>
+            </EuiSmallButton>
           </EuiModalFooter>
         </EuiModal>
       </EuiOverlayMask>
@@ -459,4 +442,5 @@ AcknowledgeAlertsModal.propTypes = {
   triggerId: PropTypes.string.isRequired,
   triggerName: PropTypes.string.isRequired,
   onClose: PropTypes.func.isRequired,
+  acknowledgeAlerts: PropTypes.func.isRequired,
 };

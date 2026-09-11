@@ -12,6 +12,11 @@ import { FormikComboBox } from '../../../../components/FormControls';
 import { validateIndex, hasError, isInvalid } from '../../../../utils/validate';
 import { canAppendWildcard, createReasonableWait, getMatchedOptions } from './utils/helpers';
 import { MONITOR_TYPE } from '../../../../utils/constants';
+import CrossClusterConfiguration from '../../components/CrossClusterConfigurations/containers';
+import {
+  getDataSourceQueryObj,
+  isDataSourceChanged,
+} from '../../../../../public/pages/utils/helpers';
 
 const CustomOption = ({ option, searchValue, contentClassName }) => {
   const { health, label, index } = option;
@@ -40,7 +45,6 @@ const propTypes = {
 class MonitorIndex extends React.Component {
   constructor(props) {
     super(props);
-
     this.lastQuery = null;
     this.state = {
       isLoading: false,
@@ -54,7 +58,6 @@ class MonitorIndex extends React.Component {
       partialMatchedAliases: [],
       exactMatchedAliases: [],
     };
-
     this.onCreateOption = this.onCreateOption.bind(this);
     this.onSearchChange = this.onSearchChange.bind(this);
     this.handleQueryIndices = this.handleQueryIndices.bind(this);
@@ -67,13 +70,20 @@ class MonitorIndex extends React.Component {
     this.onSearchChange('');
   }
 
-  onCreateOption(searchValue, selectedOptions, setFieldValue) {
+  componentDidUpdate(prevProps) {
+    if (isDataSourceChanged(prevProps, this.props)) {
+      this.onSearchChange('');
+    }
+  }
+
+  onCreateOption(searchValue, selectedOptions, setFieldValue, supportMultipleIndices) {
     const normalizedSearchValue = searchValue.trim().toLowerCase();
 
     if (!normalizedSearchValue) return;
 
     const newOption = { label: searchValue };
-    setFieldValue('index', selectedOptions.concat(newOption));
+    if (supportMultipleIndices) setFieldValue('index', selectedOptions.concat(newOption));
+    else setFieldValue('index', [newOption]);
   }
 
   async onSearchChange(searchValue) {
@@ -111,9 +121,12 @@ class MonitorIndex extends React.Component {
       return [];
     }
     try {
+      const dataSourceQuery = getDataSourceQueryObj();
       const response = await this.props.httpClient.post('../api/alerting/_indices', {
         body: JSON.stringify({ index }),
+        query: dataSourceQuery?.query,
       });
+
       if (response.ok) {
         const indices = response.resp.map(({ health, index, status }) => ({
           label: index,
@@ -141,9 +154,12 @@ class MonitorIndex extends React.Component {
     }
 
     try {
+      const dataSourceQuery = getDataSourceQueryObj();
       const response = await this.props.httpClient.post('../api/alerting/_aliases', {
         body: JSON.stringify({ alias }),
+        query: dataSourceQuery?.query,
       });
+
       if (response.ok) {
         const indices = response.resp.map(({ alias, index }) => ({ label: alias, index }));
         return _.sortBy(indices, 'label');
@@ -196,6 +212,7 @@ class MonitorIndex extends React.Component {
   }
 
   render() {
+    const { httpClient, canCallGetRemoteIndexes, remoteMonitoringEnabled } = this.props;
     const {
       isLoading,
       allIndices,
@@ -216,42 +233,62 @@ class MonitorIndex extends React.Component {
       false //isIncludingSystemIndices
     );
 
-    const supportMultipleIndices = this.props.monitorType !== MONITOR_TYPE.DOC_LEVEL;
+    let supportMultipleIndices = true;
+    let supportsCrossClusterMonitoring = false;
+    switch (this.props.monitorType) {
+      case MONITOR_TYPE.DOC_LEVEL:
+        supportMultipleIndices = false;
+        supportsCrossClusterMonitoring = false;
+        break;
+      case MONITOR_TYPE.BUCKET_LEVEL:
+      case MONITOR_TYPE.CLUSTER_METRICS:
+      case MONITOR_TYPE.QUERY_LEVEL:
+        supportsCrossClusterMonitoring = true;
+        break;
+      default:
+    }
 
     return (
-      <FormikComboBox
-        name="index"
-        formRow
-        fieldProps={{ validate: validateIndex }}
-        rowProps={{
-          label: 'Index',
-          helpText:
-            'You can use a * as a wildcard or date math index resolution in your index pattern', // TODO DRAFT: Confirm wildcard wording is appropriate for doc level monitors
-          isInvalid,
-          error: hasError,
-          style: { paddingLeft: '10px' },
-        }}
-        inputProps={{
-          placeholder: supportMultipleIndices ? 'Select indices' : 'Select index',
-          async: true,
-          isLoading,
-          options: visibleOptions,
-          onBlur: (e, field, form) => {
-            form.setFieldTouched('index', true);
-          },
-          onChange: (options, field, form) => {
-            form.setFieldValue('index', options);
-          },
-          onCreateOption: (value, field, form) => {
-            this.onCreateOption(value, field.value, form.setFieldValue);
-          },
-          onSearchChange: this.onSearchChange,
-          renderOption: this.renderOption,
-          isClearable: true,
-          singleSelection: supportMultipleIndices ? false : { asPlainText: true },
-          'data-test-subj': 'indicesComboBox',
-        }}
-      />
+      <>
+        {remoteMonitoringEnabled && canCallGetRemoteIndexes && supportsCrossClusterMonitoring ? (
+          <CrossClusterConfiguration monitorType={this.props.monitorType} httpClient={httpClient} />
+        ) : (
+          <FormikComboBox
+            name="index"
+            formRow
+            fieldProps={{ validate: validateIndex }}
+            rowProps={{
+              label: 'Index',
+              helpText:
+                'You can use a * as a wildcard or date math index resolution in your index pattern',
+              isInvalid,
+              error: hasError,
+              style: { paddingLeft: '10px' },
+            }}
+            inputProps={{
+              placeholder: supportMultipleIndices ? 'Select indices' : 'Select an index',
+              async: true,
+              isLoading,
+              options: visibleOptions,
+              onBlur: (e, field, form) => {
+                form.setFieldTouched('index', true);
+              },
+              onChange: (options, field, form) => {
+                form.setFieldValue('index', options);
+              },
+              onCreateOption: (value, field, form) => {
+                this.onCreateOption(value, field.value, form.setFieldValue, supportMultipleIndices);
+              },
+              onSearchChange: this.onSearchChange,
+              renderOption: this.renderOption,
+              delimiter: ',',
+              isClearable: true,
+              singleSelection: supportMultipleIndices ? false : { asPlainText: true },
+              'data-test-subj': 'indicesComboBox',
+            }}
+          />
+        )}
+      </>
     );
   }
 }

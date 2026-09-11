@@ -3,6 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import _ from 'lodash';
+import { DEFAULT_EMPTY_DATA } from '../../../../../utils/constants';
+
+export const URL_DEFAULT_PREFIX = 'http://localhost:9200';
 export const API_PATH_REQUIRED_PLACEHOLDER_TEXT = 'Select an API.';
 export const EMPTY_PATH_PARAMS_TEXT = 'Enter remaining path components and path parameters';
 export const GET_API_TYPE_DEBUG_TEXT =
@@ -30,6 +34,14 @@ export const DEFAULT_CLUSTER_METRICS_SCRIPT = {
   source: 'ctx.results[0] != null',
 };
 
+export const CLUSTER_METRICS_CROSS_CLUSTER_ALERT_TABLE_COLUMN = {
+  field: 'clusters',
+  name: 'Triggered clusters',
+  sortable: true,
+  truncateText: true,
+  render: (clusters = [DEFAULT_EMPTY_DATA]) => _.sortBy(clusters).join(', '),
+};
+
 export const API_TYPES = {
   CLUSTER_HEALTH: {
     type: 'CLUSTER_HEALTH',
@@ -37,7 +49,7 @@ export const API_TYPES = {
     exampleText: 'indexAlias1,indexAlias2...',
     label: 'Cluster health',
     paths: {
-      withPathParams: '_cluster/health/',
+      withPathParams: '_cluster/health',
       withoutPathParams: '_cluster/health',
     },
     get prependText() {
@@ -55,7 +67,7 @@ export const API_TYPES = {
     exampleText: 'nodeFilter1,nodeFilter2...',
     label: 'Cluster stats',
     paths: {
-      withPathParams: '_cluster/stats/nodes/',
+      withPathParams: '_cluster/stats/nodes',
       withoutPathParams: '_cluster/stats',
     },
     get prependText() {
@@ -103,6 +115,25 @@ export const API_TYPES = {
       source: 'ctx.results[0].nodes.NODE_ID.jvm.mem.heap_used_percent > 60',
     },
   },
+  CAT_INDICES: {
+    type: 'CAT_INDICES',
+    documentation: 'https://opensearch.org/docs/latest/opensearch/rest-api/cat/cat-indices/',
+    exampleText: 'index1,index2...',
+    label: 'List indices',
+    paths: {
+      withPathParams: '_cat/indices',
+      withoutPathParams: '_cat/indices',
+    },
+    get prependText() {
+      return this.paths.withPathParams || this.paths.withoutPathParams;
+    },
+    appendText: '',
+    defaultCondition: {
+      ...DEFAULT_CLUSTER_METRICS_SCRIPT,
+      source: `for (int i = 0; i < ctx.results[0].indices.size(); ++i)
+        if (ctx.results[0].indices[i].health != "green") return true`,
+    },
+  },
   CAT_PENDING_TASKS: {
     type: 'CAT_PENDING_TASKS',
     documentation: 'https://opensearch.org/docs/latest/opensearch/rest-api/cat/cat-pending-tasks/',
@@ -125,9 +156,9 @@ export const API_TYPES = {
     type: 'CAT_RECOVERY',
     documentation: 'https://opensearch.org/docs/latest/opensearch/rest-api/cat/cat-recovery/',
     exampleText: 'index1,index2...',
-    label: 'Recovery',
+    label: 'List index and shard recoveries',
     paths: {
-      withPathParams: '_cat/recovery/',
+      withPathParams: '_cat/recovery',
       withoutPathParams: '_cat/recovery',
     },
     get prependText() {
@@ -139,13 +170,32 @@ export const API_TYPES = {
       source: 'ctx.results[0].INDEX_NAME.shards.length <= 0',
     },
   },
+  CAT_SHARDS: {
+    type: 'CAT_SHARDS',
+    documentation: 'https://opensearch.org/docs/latest/opensearch/rest-api/cat/cat-shards/',
+    exampleText: 'index1,index2...',
+    label: 'List shards',
+    paths: {
+      withPathParams: '_cat/shards',
+      withoutPathParams: '_cat/shards',
+    },
+    get prependText() {
+      return this.paths.withPathParams || this.paths.withoutPathParams;
+    },
+    appendText: '',
+    defaultCondition: {
+      ...DEFAULT_CLUSTER_METRICS_SCRIPT,
+      source: `for (int i = 0; i < ctx.results[0].shards.size(); ++i)
+        if (ctx.results[0].shards[i]["unassigned.for"] != null) return true`,
+    },
+  },
   CAT_SNAPSHOTS: {
     type: 'CAT_SNAPSHOTS',
     documentation: 'https://opensearch.org/docs/latest/opensearch/rest-api/cat/cat-snapshots/',
     exampleText: 'repositoryName',
     label: 'List snapshots',
     paths: {
-      withPathParams: '_cat/snapshots/',
+      withPathParams: '_cat/snapshots',
       withoutPathParams: undefined,
     },
     get prependText() {

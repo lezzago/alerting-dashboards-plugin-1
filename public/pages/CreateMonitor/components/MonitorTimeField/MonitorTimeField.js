@@ -5,14 +5,15 @@
 
 import React from 'react';
 import PropTypes from 'prop-types';
-import FormikSelect from '../../../../components/FormControls/FormikSelect/FormikSelect';
 import { hasError, isInvalid } from '../../../../utils/validate';
 import { validateTimeField } from './utils/validation';
 import { FormikComboBox } from '../../../../components/FormControls';
 
 const MonitorTimeField = ({ dataTypes }) => {
   // Default empty option + options from index mappings mapped to ui select form
-  const dateFields = Array.from(dataTypes.date || []);
+  const dateFields = Array.from(dataTypes.date || []).concat(
+    Array.from(dataTypes.date_nanos || [])
+  );
   const options = [].concat(dateFields).map((option) => ({ label: option }));
   return (
     <FormikComboBox
@@ -34,6 +35,7 @@ const MonitorTimeField = ({ dataTypes }) => {
         },
         isClearable: false,
         singleSelection: { asPlainText: true },
+        'data-test-subj': 'timeFieldComboBox',
       }}
     />
   );

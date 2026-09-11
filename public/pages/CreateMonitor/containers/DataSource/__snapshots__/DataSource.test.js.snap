@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`DataSource renders 1`] = `
 <ContentPanel
@@ -7,22 +7,14 @@ exports[`DataSource renders 1`] = `
       "padding": "initial",
     }
   }
-  panelStyles={
-    Object {
-      "paddingLeft": "10px",
-      "paddingRight": "10px",
-    }
-  }
-  title="Data source"
+  title="Select data"
   titleSize="s"
 >
   <MonitorIndex
     httpClient={[MockFunction]}
     monitorType="query_level_monitor"
   />
-  <EuiSpacer
-    size="s"
-  />
+  <EuiSpacer />
   <MonitorTimeField />
 </ContentPanel>
 `;

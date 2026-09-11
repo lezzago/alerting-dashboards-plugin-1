@@ -5,14 +5,16 @@
 
 import React from 'react';
 import _ from 'lodash';
-import { EuiLink } from '@elastic/eui';
+import { EuiLink, EuiToolTip } from '@elastic/eui';
 import moment from 'moment';
 import { ALERT_STATE, DEFAULT_EMPTY_DATA } from '../../../utils/constants';
-import { PLUGIN_NAME } from '../../../../utils/constants';
+import { AlertInsight } from '../../../components/AlertInsight';
+import { getDataSourceId } from '../../utils/helpers';
 
-export const renderTime = (time) => {
+export const renderTime = (time, options = { showFromNow: false }) => {
   const momentTime = moment(time);
-  if (time && momentTime.isValid()) return momentTime.format('MM/DD/YY h:mm a');
+  if (time && momentTime.isValid())
+    return options.showFromNow ? momentTime.fromNow() : momentTime.format('MM/DD/YY h:mm a');
   return DEFAULT_EMPTY_DATA;
 };
 
@@ -120,6 +122,7 @@ export const alertColumns = (
   location,
   monitors,
   notifications,
+  isAgentConfigured,
   setFlyout,
   openFlyout,
   closeFlyout,
@@ -131,8 +134,10 @@ export const alertColumns = (
     sortable: true,
     truncateText: false,
     render: (total, alert) => {
-      return (
+      const alertId = `alerts_${alert.alerts[0].id}`;
+      const component = (
         <EuiLink
+          key={alertId}
           onClick={() => {
             openFlyout({
               ...alert,
@@ -149,8 +154,19 @@ export const alertColumns = (
           }}
           data-test-subj={`euiLink_${alert.trigger_name}`}
         >
-          {`${total} alerts`}
+          {total > 1 ? `${total} alerts` : `${total} alert`}
         </EuiLink>
+      );
+      const datasourceId = getDataSourceId();
+      return (
+        <AlertInsight
+          alert={alert.alerts[0]}
+          isAgentConfigured={isAgentConfigured}
+          alertId={alertId}
+          datasourceId={datasourceId}
+        >
+          {component}
+        </AlertInsight>
       );
     },
   },
@@ -208,7 +224,52 @@ export const alertColumns = (
     truncateText: true,
     textOnly: true,
     render: (name, alert) => (
-      <EuiLink href={`${PLUGIN_NAME}#/monitors/${alert.monitor_id}`}>{name}</EuiLink>
+      <EuiLink href={`#/monitors/${alert.monitor_id}?type=${alert.alert_source}`}>{name}</EuiLink>
     ),
+  },
+];
+
+export const associatedAlertsTableColumns = [
+  {
+    field: 'start_time',
+    name: 'Alert start time',
+    sortable: true,
+    truncateText: false,
+    render: renderTime,
+    dataType: 'date',
+  },
+  {
+    field: 'severity',
+    name: 'Severity',
+    sortable: true,
+    truncateText: false,
+    width: '100px',
+  },
+  {
+    name: 'Delegate monitor',
+    sortable: true,
+    truncateText: true,
+    render: ({ monitor_id, monitor_name }) => {
+      return (
+        <EuiToolTip content={monitor_name}>
+          <EuiLink href={`#/monitors/${monitor_id}?type='monitor'`} target="_blank">
+            {monitor_name}
+          </EuiLink>
+        </EuiToolTip>
+      );
+    },
+  },
+  {
+    field: 'trigger_name',
+    name: 'Trigger name',
+    sortable: true,
+    truncateText: true,
+    textOnly: true,
+  },
+  {
+    field: 'state',
+    name: 'State',
+    truncateText: true,
+    textOnly: true,
   },
 ];

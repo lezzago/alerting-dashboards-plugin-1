@@ -7,6 +7,7 @@ import React from 'react';
 import { render, shallow, mount } from 'enzyme';
 
 import MonitorActions from './MonitorActions';
+import { setupCoreStart } from '../../../../../test/utils/helpers';
 
 const getProps = () => ({
   onBulkAcknowledge: jest.fn(),
@@ -15,6 +16,10 @@ const getProps = () => ({
   onBulkDelete: jest.fn(),
   isEditDisabled: true,
   onClickEdit: jest.fn(),
+});
+
+beforeAll(() => {
+  setupCoreStart();
 });
 
 describe('MonitorActions', () => {
@@ -102,14 +107,16 @@ describe('MonitorActions', () => {
   });
 
   test('does not call onClickEdit when Edit is clicked and edit is disabled', () => {
-    wrapper.find('[data-test-subj="editButton"]').hostNodes().simulate('click');
+    wrapper.find('[data-test-subj="actionsButton"]').hostNodes().simulate('click');
+    wrapper.find('[data-test-subj="editItem"]').hostNodes().simulate('click');
     expect(props.onClickEdit).toHaveBeenCalledTimes(0);
   });
 
   test('calls onClickEdit when Edit is clicked and isEditDisabled=false', () => {
     const props = getProps();
     wrapper.setProps({ ...props, isEditDisabled: false });
-    wrapper.find('[data-test-subj="editButton"]').hostNodes().simulate('click');
+    wrapper.find('[data-test-subj="actionsButton"]').hostNodes().simulate('click');
+    wrapper.find('[data-test-subj="editItem"]').hostNodes().simulate('click');
     expect(props.onClickEdit).toHaveBeenCalledTimes(1);
   });
 });

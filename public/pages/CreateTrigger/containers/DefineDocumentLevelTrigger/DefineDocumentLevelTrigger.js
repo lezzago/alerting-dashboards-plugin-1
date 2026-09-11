@@ -17,8 +17,8 @@ import {
 } from '@elastic/eui';
 import { FormikFieldText, FormikSelect } from '../../../../components/FormControls';
 import { hasError, isInvalid } from '../../../../utils/validate';
-import { SEARCH_TYPE } from '../../../../utils/constants';
-import { DEFAULT_TRIGGER_NAME, SEVERITY_OPTIONS } from '../../utils/constants';
+import { SEARCH_TYPE, SEVERITY_OPTIONS } from '../../../../utils/constants';
+import { DEFAULT_TRIGGER_NAME } from '../../utils/constants';
 import { validateTriggerName } from '../DefineTrigger/utils/validation';
 import ConfigureActions from '../ConfigureActions';
 import TriggerQuery from '../../components/TriggerQuery';
@@ -30,6 +30,8 @@ import DocumentLevelTriggerExpression from './DocumentLevelTriggerExpression';
 import { backendErrorNotification, inputLimitText } from '../../../../utils/helpers';
 import monitorToFormik from '../../../CreateMonitor/containers/CreateMonitor/utils/monitorToFormik';
 import { buildRequest } from '../../../CreateMonitor/containers/DefineMonitor/utils/searchRequests';
+import { getTriggerContext } from '../../utils/helper';
+import { getDataSourceQueryObj } from '../../../utils/helpers';
 
 const MAX_TRIGGER_CONDITIONS = 10;
 
@@ -58,7 +60,6 @@ const selectInputProps = {
 };
 
 const propTypes = {
-  context: PropTypes.object.isRequired,
   executeResponse: PropTypes.object,
   monitorValues: PropTypes.object.isRequired,
   onRun: PropTypes.func.isRequired,
@@ -98,8 +99,12 @@ class DefineDocumentLevelTrigger extends Component {
         console.log(`Unsupported searchType found: ${JSON.stringify(searchType)}`, searchType);
     }
 
+    const dataSourceQuery = getDataSourceQueryObj();
     httpClient
-      .post('../api/alerting/monitors/_execute', { body: JSON.stringify(monitorToExecute) })
+      .post('../api/alerting/monitors/_execute', {
+        body: JSON.stringify(monitorToExecute),
+        query: dataSourceQuery?.query,
+      })
       .then((resp) => {
         if (resp.ok) {
           this.setState({ executeResponse: resp.resp });
@@ -166,7 +171,6 @@ class DefineDocumentLevelTrigger extends Component {
     const {
       edit,
       triggerArrayHelpers,
-      context,
       monitor,
       monitorValues,
       onRun,
@@ -181,6 +185,7 @@ class DefineDocumentLevelTrigger extends Component {
       plugins,
     } = this.props;
     const executeResponse = _.get(this.state, 'executeResponse', this.props.executeResponse);
+    const context = getTriggerContext(executeResponse, monitor, triggerValues, triggerIndex);
     const fieldPath = triggerIndex !== undefined ? `triggerDefinitions[${triggerIndex}].` : '';
     const isGraph = _.get(monitorValues, 'searchType') === SEARCH_TYPE.GRAPH;
     const response = _.get(executeResponse, 'input_results.results[0]');
@@ -222,6 +227,7 @@ class DefineDocumentLevelTrigger extends Component {
               }
               disabled={disableAddTriggerConditionButton}
               size={'xs'}
+              data-test-subj={`addTriggerConditionButton`}
             >
               + Add condition
             </EuiButtonEmpty>
@@ -275,7 +281,14 @@ class DefineDocumentLevelTrigger extends Component {
         <div style={{ padding: '0px 10px', paddingTop: '10px' }}>
           <FormikFieldText
             name={`${fieldPath}name`}
-            fieldProps={{ validate: validateTriggerName(triggers, triggerValues, fieldPath) }}
+            fieldProps={{
+              validate: (val) =>
+                validateTriggerName(
+                  triggerValues?.triggerDefinitions,
+                  triggerIndex,
+                  setFlyout !== null
+                )(val),
+            }}
             formRow
             rowProps={defaultRowProps}
             inputProps={defaultInputProps}

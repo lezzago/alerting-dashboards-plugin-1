@@ -24,7 +24,6 @@ export default class Home extends Component {
       location: { pathname },
     } = this.props;
     const selectedTabId = getSelectedTabId(pathname);
-
     this.state = { selectedTabId };
     this.tabs = [
       {
@@ -79,11 +78,15 @@ export default class Home extends Component {
   );
 
   render() {
-    const { httpClient, notifications, setFlyout } = this.props;
+    const { httpClient, notifications, setFlyout, landingDataSourceId, defaultRoute } = this.props;
     return (
       <div>
-        <EuiTabs>{this.tabs.map(this.renderTab)}</EuiTabs>
-        <div style={{ padding: '25px 25px' }}>
+        {!defaultRoute && (
+          <EuiTabs size="s" style={{ padding: '16px 16px 0px' }}>
+            {this.tabs.map(this.renderTab)}
+          </EuiTabs>
+        )}
+        <div style={{ padding: '16px' }}>
           <Switch>
             <Route
               exact
@@ -95,6 +98,7 @@ export default class Home extends Component {
                   notifications={notifications}
                   perAlertView={false}
                   setFlyout={setFlyout}
+                  landingDataSourceId={landingDataSourceId}
                 />
               )}
             />
@@ -102,7 +106,12 @@ export default class Home extends Component {
               exact
               path="/monitors"
               render={(props) => (
-                <Monitors {...props} httpClient={httpClient} notifications={notifications} />
+                <Monitors
+                  {...props}
+                  httpClient={httpClient}
+                  notifications={notifications}
+                  landingDataSourceId={landingDataSourceId}
+                />
               )}
             />
             <Route
@@ -116,7 +125,7 @@ export default class Home extends Component {
                 />
               )}
             />
-            <Redirect to="/dashboard" />
+            <Redirect to={defaultRoute || '/dashboard'} />
           </Switch>
         </div>
       </div>

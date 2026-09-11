@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import React from 'react';
+import Message from '../components/Action/actions';
+
 export const DEFAULT_MESSAGE_SOURCE = {
   BUCKET_LEVEL_MONITOR: `
   Monitor {{ctx.monitor.name}} just entered alert status. Please investigate the issue.
@@ -33,6 +36,11 @@ export const DEFAULT_MESSAGE_SOURCE = {
   - Period start: {{ctx.periodStart}}
   - Period end: {{ctx.periodEnd}}
   `.trim(),
+  PPL_MONITOR: `
+Monitor {{ctx.monitor.name}} just entered alert status. Please investigate the issue.
+  - Trigger: {{ctx.ppl_trigger.name}}
+  - Severity: {{ctx.ppl_trigger.severity}}
+  `.trim(),
 };
 
 export const FORMIK_INITIAL_ACTION_VALUES = {
@@ -40,7 +48,7 @@ export const FORMIK_INITIAL_ACTION_VALUES = {
   destination_id: '',
   subject_template: {
     lang: 'mustache',
-    source: '',
+    source: 'Alerting Notification action',
   },
   message_template: {
     lang: 'mustache',
@@ -52,14 +60,6 @@ export const FORMIK_INITIAL_ACTION_VALUES = {
     unit: 'MINUTES', // throttle unit only supports MINUTES currently, no UI element mapped
   },
 };
-
-export const SEVERITY_OPTIONS = [
-  { value: '1', text: '1 (Highest)' },
-  { value: '2', text: '2 (High)' },
-  { value: '3', text: '3 (Medium)' },
-  { value: '4', text: '4 (Low)' },
-  { value: '5', text: '5 (Lowest)' },
-];
 
 export const THRESHOLD_ENUM_OPTIONS = [
   { value: 'ABOVE', text: 'IS ABOVE' },
@@ -76,6 +76,7 @@ export const AND_OR_CONDITION_OPTIONS = [
 export const DEFAULT_TRIGGER_NAME = 'New trigger';
 export const DEFAULT_ACTION_TYPE = 'slack';
 
-export const MANAGE_CHANNELS_PATH = `/app/notifications-dashboards#/channels`;
-
-export const CHANNEL_TYPES = ['slack', 'email', 'chime', 'webhook', 'ses', 'sns'];
+export const webhookNotificationActionMessageComponent = (props) => (
+  <Message isSubjectDisabled {...props} />
+);
+export const defaultNotificationActionMessageComponent = (props) => <Message {...props} />;

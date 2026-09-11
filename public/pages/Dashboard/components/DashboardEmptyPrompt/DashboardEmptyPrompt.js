@@ -5,10 +5,12 @@
 
 import React from 'react';
 import PropTypes from 'prop-types';
-import { EuiButton, EuiButtonEmpty, EuiEmptyPrompt, EuiText } from '@elastic/eui';
+import { EuiSmallButton, EuiSmallButtonEmpty, EuiEmptyPrompt, EuiText } from '@elastic/eui';
 
 import { APP_PATH } from '../../../../utils/constants';
-import { PLUGIN_NAME } from '../../../../../utils/constants';
+import { MONITORS_NAV_ID } from '../../../../../utils/constants';
+import { getUseUpdatedUx } from '../../../../services';
+import { getURL } from '../../../utils/helpers';
 
 const createMonitorText =
   'There are no existing alerts. Create a monitor to add triggers and actions. Once an alarm is triggered, the state will show in this table.';
@@ -17,16 +19,16 @@ const createTriggerText =
 const editTriggerConditionsText =
   'There are no existing alerts. Adjust trigger conditions to start alerting. Once an alarm is triggered, the state will show in this table.';
 
-const createMonitorButton = (
-  <EuiButton fill href={`${PLUGIN_NAME}#${APP_PATH.CREATE_MONITOR}`}>
+const getCreateMonitorButton = () => (
+  <EuiSmallButton fill href={`#${APP_PATH.CREATE_MONITOR}`}>
     Create monitor
-  </EuiButton>
+  </EuiSmallButton>
 );
 const editMonitorButton = (onCreateTrigger) => (
-  <EuiButtonEmpty onClick={onCreateTrigger}>Edit monitor</EuiButtonEmpty>
+  <EuiSmallButtonEmpty onClick={onCreateTrigger}>Edit monitor</EuiSmallButtonEmpty>
 );
 
-const DashboardEmptyPrompt = ({ onCreateTrigger, isModal = false }) => {
+const DashboardEmptyPrompt = ({ onCreateTrigger, landingDataSourceId, isModal = false }) => {
   const inMonitorDetails = typeof onCreateTrigger === 'function';
   const displayText = isModal
     ? editTriggerConditionsText
@@ -37,12 +39,12 @@ const DashboardEmptyPrompt = ({ onCreateTrigger, isModal = false }) => {
     ? undefined
     : isModal
     ? editMonitorButton(onCreateTrigger)
-    : createMonitorButton;
+    : getCreateMonitorButton();
   return (
     <EuiEmptyPrompt
       style={{ maxWidth: '45em' }}
       body={
-        <EuiText>
+        <EuiText size="s">
           <p>{displayText}</p>
         </EuiText>
       }
@@ -53,6 +55,7 @@ const DashboardEmptyPrompt = ({ onCreateTrigger, isModal = false }) => {
 
 DashboardEmptyPrompt.propTypes = {
   onCreateTrigger: PropTypes.func,
+  landingDataSourceId: PropTypes.string,
 };
 
 export default DashboardEmptyPrompt;

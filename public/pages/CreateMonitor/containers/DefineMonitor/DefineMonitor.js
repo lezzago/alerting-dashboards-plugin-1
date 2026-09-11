@@ -7,7 +7,15 @@ import React, { Component, Fragment } from 'react';
 import moment from 'moment';
 import _ from 'lodash';
 import PropTypes from 'prop-types';
-import { EuiSpacer, EuiButton, EuiCallOut, EuiAccordion, EuiLoadingSpinner } from '@elastic/eui';
+import {
+  EuiSpacer,
+  EuiSmallButton,
+  EuiCallOut,
+  EuiAccordion,
+  EuiLoadingSpinner,
+  EuiEmptyPrompt,
+  EuiPanel,
+} from '@elastic/eui';
 import ContentPanel from '../../../../components/ContentPanel';
 import VisualGraph from '../../components/VisualGraph';
 import ExtractionQuery from '../../components/ExtractionQuery';
@@ -29,17 +37,24 @@ import { FORMIK_INITIAL_VALUES } from '../CreateMonitor/utils/constants';
 import { API_TYPES } from '../../components/ClusterMetricsMonitor/utils/clusterMetricsMonitorConstants';
 import ConfigureDocumentLevelQueries from '../../components/DocumentLevelMonitorQueries/ConfigureDocumentLevelQueries';
 import FindingsDashboard from '../../../Dashboard/containers/FindingsDashboard';
-import { validDocLevelGraphQueries } from '../../../Dashboard/components/FindingsDashboard/utils';
+import { validDocLevelGraphQueries } from '../../components/DocumentLevelMonitorQueries/utils/helpers';
+import { validateWhereFilters } from '../../components/MonitorExpressions/expressions/utils/whereHelpers';
+import { getDataSourceQueryObj, getDataSourceId, getClusterSetting } from '../../../utils/helpers';
+import { CROSS_CLUSTER_MONITORING_ENABLED_SETTING } from '../../components/CrossClusterConfigurations/utils/helpers';
+import { PplQueryEditor } from '../../../../components/PplQueryEditor';
+import {
+  runPPLPreview,
+  extractIndicesFromPPL,
+  findCommonDateFields,
+  addTimeFilterToQuery,
+  computeLookBackMinutes,
+} from '../CreateMonitor/utils/pplAlertingHelpers';
 
 function renderEmptyMessage(message) {
   return (
-    <div style={{ padding: '20px', border: '1px solid #D9D9D9', borderRadius: '5px' }}>
-      <div
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '450px' }}
-      >
-        <div>{_.isEmpty(message) ? <EuiLoadingSpinner size="xl" /> : message}</div>
-      </div>
-    </div>
+    <EuiPanel hasShadow={false} style={{ height: 450, display: 'flex', alignItems: 'center' }}>
+      <EuiEmptyPrompt body={_.isEmpty(message) ? <EuiLoadingSpinner size="xl" /> : message} />
+    </EuiPanel>
   );
 }
 
@@ -50,15 +65,16 @@ const propTypes = {
   touched: PropTypes.object,
   detectorId: PropTypes.object,
   notifications: PropTypes.object.isRequired,
+  flyoutMode: PropTypes.string,
 };
 const defaultProps = {
   errors: {},
+  flyoutMode: '',
 };
 
 class DefineMonitor extends Component {
   constructor(props) {
     super(props);
-
     this.state = {
       dataTypes: {},
       performanceResponse: null,
@@ -66,8 +82,18 @@ class DefineMonitor extends Component {
       formikSnapshot: this.props.values,
       plugins: [],
       loadingResponse: false,
+      PanelComponent: props.flyoutMode ? ({ children }) => <>{children}</> : ContentPanel,
+      remoteMonitoringEnabled: false,
+      canCallGetRemoteIndexes: false,
+      pplPreviewLoading: false,
+      pplPreviewError: null,
+      pplPreviewResult: null,
+      pplPreviewOpen: false,
+      pplIndices: [],
+      pplAvailableDateFields: [],
+      pplDateFieldsLoading: false,
+      pplDateFieldsError: null,
     };
-
     this.renderGraph = this.renderGraph.bind(this);
     this.onRunQuery = this.onRunQuery.bind(this);
     this.resetResponse = this.resetResponse.bind(this);
@@ -80,6 +106,7 @@ class DefineMonitor extends Component {
     this.getPlugins = this.getPlugins.bind(this);
     this.getSupportedApiList = this.getSupportedApiList.bind(this);
     this.showPluginWarning = this.showPluginWarning.bind(this);
+    this.getSettings = this.getSettings.bind(this);
   }
 
   componentDidMount() {
@@ -88,11 +115,13 @@ class DefineMonitor extends Component {
     const isGraph = searchType === SEARCH_TYPE.GRAPH;
     const hasIndices = !!index.length;
     const hasTimeField = !!timeField;
+    this.getSettings();
     if (isGraph && hasIndices) {
       this.onQueryMappings();
       if (hasTimeField || !this.requiresTimeField()) this.onRunQuery();
     }
     if (searchType === SEARCH_TYPE.CLUSTER_METRICS) this.getSupportedApiList();
+    if (searchType === SEARCH_TYPE.PPL) this.initializePplIndices();
   }
 
   componentDidUpdate(prevProps) {
@@ -105,7 +134,7 @@ class DefineMonitor extends Component {
       aggregations: prevAggregations,
       bucketValue: prevBucketValue,
       bucketUnitOfTime: prevBucketUnitOfTime,
-      where: prevWhere,
+      filters: prevFilters,
       queries: prevQueries,
     } = prevProps.values;
     const {
@@ -117,7 +146,7 @@ class DefineMonitor extends Component {
       aggregations,
       bucketValue,
       bucketUnitOfTime,
-      where,
+      filters,
       queries,
     } = this.props.values;
     const isGraph = searchType === SEARCH_TYPE.GRAPH;
@@ -155,7 +184,7 @@ class DefineMonitor extends Component {
       prevAggregations !== aggregations ||
       prevBucketValue !== bucketValue ||
       prevBucketUnitOfTime !== bucketUnitOfTime ||
-      prevWhere !== where ||
+      (prevFilters !== filters && validateWhereFilters(filters)) ||
       prevGroupBy !== groupBy
     )
       this.onRunQuery();
@@ -164,7 +193,42 @@ class DefineMonitor extends Component {
     if (prevSearchType !== searchType || prevMonitorType !== monitor_type || groupByCleared) {
       this.resetResponse();
       if (searchType === SEARCH_TYPE.CLUSTER_METRICS) this.getSupportedApiList();
+      if (searchType === SEARCH_TYPE.PPL && prevSearchType !== SEARCH_TYPE.PPL) {
+        this.initializePplIndices();
+      }
     }
+  }
+
+  async getSettings() {
+    const { httpClient } = this.props;
+    let canCallGetRemoteIndexes = false;
+    let remoteMonitoringEnabled = await getClusterSetting(
+      httpClient,
+      CROSS_CLUSTER_MONITORING_ENABLED_SETTING,
+      false
+    );
+
+    // Boolean settings can be returned as strings (e.g., `"true"`, and `"false"`). Constructing boolean value from the string.
+    if (typeof remoteMonitoringEnabled === 'string') {
+      remoteMonitoringEnabled = JSON.parse(remoteMonitoringEnabled);
+    }
+
+    // Check whether the user can call GetRemoteIndexes
+    if (remoteMonitoringEnabled) {
+      try {
+        const query = {
+          indexes: '*,*:*',
+          include_mappings: false,
+          dataSourceId: getDataSourceId(),
+        };
+        const response = await httpClient.get(`../api/alerting/remote/indexes`, { query: query });
+        canCallGetRemoteIndexes = response.ok;
+      } catch (e) {
+        console.warn('Error while retrieving clusters:', e);
+      }
+    }
+
+    this.setState({ remoteMonitoringEnabled, canCallGetRemoteIndexes });
   }
 
   requiresTimeField() {
@@ -187,7 +251,8 @@ class DefineMonitor extends Component {
   async getPlugins() {
     const { httpClient } = this.props;
     try {
-      const pluginsResponse = await httpClient.get('../api/alerting/_plugins');
+      const dataSourceQuery = getDataSourceQueryObj();
+      const pluginsResponse = await httpClient.get('../api/alerting/_plugins', dataSourceQuery);
       if (pluginsResponse.ok) {
         this.setState({ plugins: pluginsResponse.resp.map((plugin) => plugin.component) });
       } else {
@@ -224,16 +289,18 @@ class DefineMonitor extends Component {
   };
 
   renderGraph() {
-    const { errors, history, httpClient, location, notifications, values } = this.props;
-    const { response, performanceResponse, formikSnapshot, dataTypes } = this.state;
+    const { errors, history, httpClient, location, notifications, values, flyoutMode } = this.props;
+    const { response, performanceResponse, formikSnapshot, dataTypes, loadingResponse } =
+      this.state;
     const aggregations = _.get(values, 'aggregations');
-
     const monitorExpressions = () => {
       switch (values.monitor_type) {
         case MONITOR_TYPE.DOC_LEVEL:
           return <ConfigureDocumentLevelQueries errors={errors} dataTypes={dataTypes} />;
         default:
-          return <MonitorExpressions errors={errors} dataTypes={dataTypes} />;
+          return (
+            <MonitorExpressions errors={errors} dataTypes={dataTypes} flyoutMode={flyoutMode} />
+          );
       }
     };
 
@@ -265,28 +332,33 @@ class DefineMonitor extends Component {
 
     return (
       <Fragment>
-        <EuiSpacer size="s" />
+        {!flyoutMode && <EuiSpacer size="s" />}
         {monitorExpressions()}
-        <EuiSpacer size="xl" />
+        {!flyoutMode && (
+          <>
+            <EuiSpacer size="xl" />
 
-        <EuiAccordion id="preview-query-performance-accordion" buttonContent={accordionTitle}>
-          <EuiSpacer size="s" />
-          <QueryPerformance response={performanceResponse} />
-          <EuiSpacer size="m" />
+            <EuiAccordion id="preview-query-performance-accordion" buttonContent={accordionTitle}>
+              <EuiSpacer size="s" />
+              <QueryPerformance response={performanceResponse} />
+              <EuiSpacer size="m" />
 
-          {errors.where
-            ? renderEmptyMessage(
-                'Invalid input in data filter. Remove data filter or adjust filter '
-              )
-            : previewContent()}
-        </EuiAccordion>
-        <EuiSpacer size="m" />
+              {errors.filters
+                ? renderEmptyMessage(
+                    'Invalid input in data filter. Remove data filter or adjust filter '
+                  )
+                : loadingResponse
+                  ? renderEmptyMessage()
+                  : previewContent()}
+            </EuiAccordion>
+            <EuiSpacer size="m" />
+          </>
+        )}
       </Fragment>
     );
   }
 
   async onRunQuery() {
-    this.setState({ loadingResponse: true });
     const { httpClient, values, notifications } = this.props;
     const { monitor_type, searchType } = values;
 
@@ -294,8 +366,28 @@ class DefineMonitor extends Component {
     switch (monitor_type) {
       case MONITOR_TYPE.DOC_LEVEL:
         const { queries } = values;
-        if (SEARCH_TYPE.GRAPH && !validDocLevelGraphQueries(queries)) return;
+        const canExecute = searchType === SEARCH_TYPE.GRAPH && validDocLevelGraphQueries(queries);
+        if (!canExecute) return;
     }
+
+    // Don't attempt to run a preview until the query is actually executable.
+    // A freshly-opened monitor (e.g. reached via a direct deep-link to
+    // #/create-monitor, which mounts CreateMonitor before the data source
+    // resolves) has no index and no time field yet. Building a graph/query
+    // request from that state yields a `range` clause with an empty field
+    // name (`{ range: { "": {...} } }`), which the backend rejects with
+    // "[bool] failed to parse field [filter]" and surfaces as a spurious
+    // "Failed to run the query" toast. componentDidMount already gates the
+    // initial run on these conditions; centralize the same guard here so the
+    // componentDidUpdate aggregation/bucket branch can't bypass it.
+    const isIndexBackedSearch =
+      searchType === SEARCH_TYPE.GRAPH || searchType === SEARCH_TYPE.QUERY;
+    const hasIndices = Array.isArray(values.index) && values.index.length > 0;
+    if (isIndexBackedSearch && (!hasIndices || (this.requiresTimeField() && !values.timeField))) {
+      return;
+    }
+
+    this.setState({ loadingResponse: true });
 
     const formikSnapshot = _.cloneDeep(values);
     let requests;
@@ -338,14 +430,14 @@ class DefineMonitor extends Component {
           default:
             console.log(`Unsupported searchType found: ${JSON.stringify(searchType)}`, searchType);
         }
-
+        const dataSourceQuery = getDataSourceQueryObj();
         return httpClient.post('../api/alerting/monitors/_execute', {
           body: JSON.stringify(monitor),
+          query: dataSourceQuery?.query,
         });
       });
 
       const [queryResponse, optionalResponse] = await Promise.all(promises);
-
       if (queryResponse.ok) {
         const endTime = moment();
         const duration = moment.duration(endTime.diff(startTime)).milliseconds();
@@ -389,7 +481,8 @@ class DefineMonitor extends Component {
   }
 
   async onQueryMappings() {
-    const index = this.props.values.index.map(({ label }) => label);
+    // Indexes for remote clusters will store the index name in the 'value' attribute of the object, not the 'label' attribute.
+    const index = this.props.values.index.map(({ label, value }) => value || label);
     try {
       const mappings = await this.queryMappings(index);
       const dataTypes = getPathsPerDataType(mappings);
@@ -400,16 +493,36 @@ class DefineMonitor extends Component {
   }
 
   async queryMappings(index) {
-    if (!index.length) {
-      return {};
-    }
-
+    if (!index.length) return {};
+    const dataSourceQuery = getDataSourceQueryObj();
     try {
-      const response = await this.props.httpClient.post('../api/alerting/_mappings', {
-        body: JSON.stringify({ index }),
-      });
+      // If any index contain ":", it indicates at least 1 remote index is configured.
+      const hasRemoteClusters = index.some((indexName) => indexName.includes(':'));
+      const response = hasRemoteClusters
+        ? await this.props.httpClient.get('../api/alerting/remote/indexes', {
+            query: {
+              indexes: index.join(','),
+              include_mappings: true,
+              dataSourceId: getDataSourceId(),
+            },
+          })
+        : // Otherwise, all configured indexes are on the local cluster.
+          await this.props.httpClient.post('../api/alerting/_mappings', {
+            body: JSON.stringify({ index }),
+            query: dataSourceQuery?.query,
+          });
       if (response.ok) {
-        return response.resp;
+        if (hasRemoteClusters) {
+          const mappings = {};
+          Object.entries(response.resp).forEach(([_, clusterInfo]) => {
+            Object.entries(clusterInfo.indexes).forEach(([indexName, indexInfo]) => {
+              mappings[indexName] = { mappings: indexInfo.mappings };
+            });
+          });
+          return mappings;
+        } else {
+          return response.resp;
+        }
       }
       return {};
     } catch (err) {
@@ -418,7 +531,7 @@ class DefineMonitor extends Component {
   }
 
   renderVisualMonitor() {
-    const { values } = this.props;
+    const { values, flyoutMode } = this.props;
     const { index, timeField } = values;
     let content;
     const supportsTimeField = values.monitor_type !== MONITOR_TYPE.DOC_LEVEL;
@@ -434,7 +547,7 @@ class DefineMonitor extends Component {
       actions: [],
       content: (
         <React.Fragment>
-          <div style={{ padding: '0px 10px' }}>{content}</div>
+          <div style={flyoutMode ? {} : { padding: '0px 10px' }}>{content}</div>
         </React.Fragment>
       ),
     };
@@ -462,9 +575,9 @@ class DefineMonitor extends Component {
     }
     return {
       actions: [
-        <EuiButton disabled={runIsDisabled} onClick={this.onRunQuery}>
+        <EuiSmallButton disabled={runIsDisabled} onClick={this.onRunQuery}>
           Run
-        </EuiButton>,
+        </EuiSmallButton>,
       ],
       content: (
         <React.Fragment>
@@ -511,7 +624,9 @@ class DefineMonitor extends Component {
       requiresPathParams = _.isEmpty(requiresPathParams);
       if (!requiresPathParams) {
         const path = _.get(API_TYPES, `${apiKey}.paths.withoutPathParams`);
-        const values = { uri: { ...FORMIK_INITIAL_VALUES.uri, path } };
+        const values = {
+          uri: { ...FORMIK_INITIAL_VALUES.uri, path, clusterNames: [] },
+        };
         requests.push(buildClusterMetricsRequest(values));
       }
     });
@@ -522,8 +637,10 @@ class DefineMonitor extends Component {
       _.set(monitor, 'name', tempMonitorName);
       _.set(monitor, 'triggers', []);
       _.set(monitor, 'inputs[0].uri', request);
+      const dataSourceQuery = getDataSourceQueryObj();
       return httpClient.post('../api/alerting/monitors/_execute', {
         body: JSON.stringify(monitor),
+        query: dataSourceQuery?.query,
       });
     });
 
@@ -557,6 +674,147 @@ class DefineMonitor extends Component {
     });
   }
 
+  initializePplIndices = async () => {
+    const { httpClient, landingDataSourceId } = this.props;
+    try {
+      const resp = await httpClient.get('/api/alerting/indices', {
+        query: landingDataSourceId ? { dataSourceId: landingDataSourceId } : undefined,
+      });
+      this.setState({ pplIndices: resp?.indices || [] });
+    } catch (e) {
+      this.setState({ pplIndices: [] });
+    }
+  };
+
+  notifyDateFieldsChange = (fields, error, loading) => {
+    if (this.props.onPplDateFieldsChange) {
+      this.props.onPplDateFieldsChange({ availableDateFields: fields, error, loading });
+    }
+  };
+
+  detectPplTimestampFields = async (pplQuery) => {
+    const { httpClient, landingDataSourceId } = this.props;
+    const indices = extractIndicesFromPPL(pplQuery);
+    if (indices.length === 0) {
+      this.setState(
+        {
+          pplAvailableDateFields: [],
+          pplDateFieldsError: 'No indices found in query',
+          pplDateFieldsLoading: false,
+        },
+        () => this.notifyDateFieldsChange([], 'No indices found in query', false)
+      );
+      return;
+    }
+    this.setState({ pplDateFieldsLoading: true, pplDateFieldsError: null }, () =>
+      this.notifyDateFieldsChange(this.state.pplAvailableDateFields, null, true)
+    );
+    try {
+      const { commonDateFields, error } = await findCommonDateFields(
+        httpClient,
+        indices,
+        landingDataSourceId
+      );
+      if (error) {
+        this.setState(
+          {
+            pplAvailableDateFields: [],
+            pplDateFieldsError: error,
+            pplDateFieldsLoading: false,
+          },
+          () => this.notifyDateFieldsChange([], error, false)
+        );
+        return;
+      }
+      this.setState(
+        {
+          pplAvailableDateFields: commonDateFields,
+          pplDateFieldsError: null,
+          pplDateFieldsLoading: false,
+        },
+        () => this.notifyDateFieldsChange(commonDateFields, null, false)
+      );
+    } catch (err) {
+      const errMsg = err?.message || 'Failed to detect timestamp fields';
+      this.setState(
+        {
+          pplAvailableDateFields: [],
+          pplDateFieldsError: errMsg,
+          pplDateFieldsLoading: false,
+        },
+        () => this.notifyDateFieldsChange([], errMsg, false)
+      );
+    }
+  };
+
+  debouncedDetectPplTimestampFields = _.debounce((pplQuery) => {
+    this.detectPplTimestampFields(pplQuery);
+  }, 1000);
+
+  runPplPreview = async () => {
+    const { httpClient, values, landingDataSourceId } = this.props;
+    this.setState({
+      pplPreviewLoading: true,
+      pplPreviewError: null,
+      pplPreviewResult: null,
+      pplPreviewOpen: true,
+    });
+    try {
+      let queryText = values.pplQuery || '';
+      const lbMinutes = computeLookBackMinutes(values);
+      if (lbMinutes > 0 && values.timestampField) {
+        queryText = addTimeFilterToQuery(queryText, lbMinutes, values.timestampField);
+      }
+      const data = await runPPLPreview(httpClient, {
+        queryText,
+        dataSourceId: values.dataSourceId || landingDataSourceId,
+      });
+      if (data?.ok === false) {
+        this.setState({
+          pplPreviewError: data.error || 'Incorrect data source or invalid query',
+          pplPreviewLoading: false,
+        });
+        return;
+      }
+      this.setState({ pplPreviewResult: data, pplPreviewLoading: false });
+    } catch (e) {
+      this.setState({
+        pplPreviewError: e?.body?.message || e?.message || 'Incorrect data source or invalid query',
+        pplPreviewLoading: false,
+      });
+    }
+  };
+
+  renderPplMonitor() {
+    const { values } = this.props;
+    const { pplPreviewLoading, pplPreviewError, pplPreviewResult, pplPreviewOpen, pplIndices } =
+      this.state;
+
+    return {
+      actions: [],
+      content: (
+        <PplQueryEditor
+          pplQuery={values.pplQuery || ''}
+          onQueryChange={(text) => {
+            if (this.props.onPplQueryChange) {
+              this.props.onPplQueryChange(text);
+              this.debouncedDetectPplTimestampFields(text);
+            }
+          }}
+          previewResult={pplPreviewResult}
+          previewError={pplPreviewError}
+          previewLoading={pplPreviewLoading}
+          previewOpen={pplPreviewOpen}
+          onPreviewToggle={(isOpen) => this.setState({ pplPreviewOpen: isOpen })}
+          onRunPreview={this.runPplPreview}
+          services={this.props.services}
+          indices={pplIndices}
+          wrapperStyle={{ padding: '0px 10px' }}
+        />
+      ),
+    };
+  }
+
   getMonitorContent() {
     const { values } = this.props;
     switch (values.searchType) {
@@ -564,6 +822,8 @@ class DefineMonitor extends Component {
         return this.renderVisualMonitor();
       case SEARCH_TYPE.CLUSTER_METRICS:
         return this.renderClusterMetricsMonitor();
+      case SEARCH_TYPE.PPL:
+        return this.renderPplMonitor();
       default:
         return this.renderExtractionQuery();
     }
@@ -576,15 +836,30 @@ class DefineMonitor extends Component {
   }
 
   render() {
-    const { values, errors, httpClient, detectorId, notifications, isDarkMode } = this.props;
-    const { dataTypes } = this.state;
+    const {
+      values,
+      values: { monitor_type },
+      errors,
+      httpClient,
+      detectorId,
+      notifications,
+      isDarkMode,
+      flyoutMode,
+    } = this.props;
+    const { dataTypes, PanelComponent, canCallGetRemoteIndexes, remoteMonitoringEnabled } =
+      this.state;
     const monitorContent = this.getMonitorContent();
     const { searchType } = this.props.values;
-    const isGraphOrQuery = searchType === SEARCH_TYPE.GRAPH || searchType === SEARCH_TYPE.QUERY;
+    const displayDataSourcePanel =
+      searchType === SEARCH_TYPE.GRAPH ||
+      searchType === SEARCH_TYPE.QUERY ||
+      (canCallGetRemoteIndexes &&
+        remoteMonitoringEnabled &&
+        monitor_type === MONITOR_TYPE.CLUSTER_METRICS);
 
     return (
       <div>
-        {isGraphOrQuery && (
+        {!flyoutMode && displayDataSourcePanel && (
           <div>
             <DataSource
               values={values}
@@ -594,18 +869,16 @@ class DefineMonitor extends Component {
               detectorId={detectorId}
               notifications={notifications}
               isDarkMode={isDarkMode}
+              canCallGetRemoteIndexes={canCallGetRemoteIndexes}
+              remoteMonitoringEnabled={remoteMonitoringEnabled}
+              landingDataSourceId={this.props.landingDataSourceId}
             />
             <EuiSpacer />
           </div>
         )}
-
-        <ContentPanel
+        <PanelComponent
           title="Query"
           titleSize="s"
-          panelStyles={{
-            paddingLeft: '10px',
-            paddingRight: '10px',
-          }}
           bodyStyles={{ padding: 'initial' }}
           actions={monitorContent.actions}
         >
@@ -620,9 +893,8 @@ class DefineMonitor extends Component {
                 <EuiSpacer size="s" />,
               ]
             : null}
-
           {monitorContent.content}
-        </ContentPanel>
+        </PanelComponent>
       </div>
     );
   }

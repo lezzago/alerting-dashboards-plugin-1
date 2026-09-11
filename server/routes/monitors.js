@@ -4,22 +4,26 @@
  */
 
 import { schema } from '@osd/config-schema';
+import { createValidateQuerySchema } from '../services/utils/helpers';
 
-export default function (services, router) {
+export default function (services, router, dataSourceEnabled) {
   const { monitorService } = services;
+
+  const fieldValidations = {
+    from: schema.number(),
+    size: schema.number(),
+    search: schema.string(),
+    sortField: schema.string(),
+    sortDirection: schema.string(),
+    state: schema.string(),
+    monitorIds: schema.maybe(schema.any()),
+  };
 
   router.get(
     {
       path: '/api/alerting/monitors',
       validate: {
-        query: schema.object({
-          from: schema.number(),
-          size: schema.number(),
-          search: schema.string(),
-          sortField: schema.string(),
-          sortDirection: schema.string(),
-          state: schema.string(),
-        }),
+        query: createValidateQuerySchema(dataSourceEnabled, fieldValidations),
       },
     },
     monitorService.getMonitors
@@ -30,6 +34,7 @@ export default function (services, router) {
       path: '/api/alerting/monitors/_search',
       validate: {
         body: schema.any(),
+        query: createValidateQuerySchema(dataSourceEnabled),
       },
     },
     monitorService.searchMonitors
@@ -40,6 +45,7 @@ export default function (services, router) {
       path: '/api/alerting/monitors',
       validate: {
         body: schema.any(),
+        query: createValidateQuerySchema(dataSourceEnabled),
       },
     },
     monitorService.createMonitor
@@ -47,15 +53,39 @@ export default function (services, router) {
 
   router.post(
     {
+      path: '/api/alerting/workflows',
+      validate: {
+        body: schema.any(),
+        query: createValidateQuerySchema(dataSourceEnabled),
+      },
+    },
+    monitorService.createWorkflow
+  );
+
+  router.post(
+    {
       path: '/api/alerting/monitors/_execute',
       validate: {
-        query: schema.object({
+        body: schema.any(),
+        query: createValidateQuerySchema(dataSourceEnabled, {
           dryrun: schema.maybe(schema.string()),
         }),
-        body: schema.any(),
       },
     },
     monitorService.executeMonitor
+  );
+
+  router.get(
+    {
+      path: '/api/alerting/workflows/{id}',
+      validate: {
+        params: schema.object({
+          id: schema.string(),
+        }),
+        query: createValidateQuerySchema(dataSourceEnabled),
+      },
+    },
+    monitorService.getWorkflow
   );
 
   router.get(
@@ -65,10 +95,16 @@ export default function (services, router) {
         params: schema.object({
           id: schema.string(),
         }),
+        query: createValidateQuerySchema(dataSourceEnabled),
       },
     },
     monitorService.getMonitor
   );
+
+  const fieldValidationForMonitors = {
+    ifSeqNo: schema.maybe(schema.number()),
+    ifPrimaryTerm: schema.maybe(schema.number()),
+  };
 
   router.put(
     {
@@ -77,10 +113,21 @@ export default function (services, router) {
         params: schema.object({
           id: schema.string(),
         }),
-        query: schema.object({
-          ifSeqNo: schema.maybe(schema.number()),
-          ifPrimaryTerm: schema.maybe(schema.number()),
+        body: schema.any(),
+        query: createValidateQuerySchema(dataSourceEnabled, fieldValidationForMonitors),
+      },
+    },
+    monitorService.updateMonitor
+  );
+
+  router.put(
+    {
+      path: '/api/alerting/workflows/{id}',
+      validate: {
+        params: schema.object({
+          id: schema.string(),
         }),
+        query: createValidateQuerySchema(dataSourceEnabled, fieldValidationForMonitors),
         body: schema.any(),
       },
     },
@@ -94,12 +141,27 @@ export default function (services, router) {
         params: schema.object({
           id: schema.string(),
         }),
-        query: schema.object({
+        query: createValidateQuerySchema(dataSourceEnabled, {
           version: schema.number(),
         }),
       },
     },
     monitorService.deleteMonitor
+  );
+
+  router.delete(
+    {
+      path: '/api/alerting/workflows/{id}',
+      validate: {
+        params: schema.object({
+          id: schema.string(),
+        }),
+        query: createValidateQuerySchema(dataSourceEnabled, {
+          version: schema.number(),
+        }),
+      },
+    },
+    monitorService.deleteWorkflow
   );
 
   router.post(
@@ -110,8 +172,23 @@ export default function (services, router) {
           id: schema.string(),
         }),
         body: schema.any(),
+        query: createValidateQuerySchema(dataSourceEnabled),
       },
     },
     monitorService.acknowledgeAlerts
+  );
+
+  router.post(
+    {
+      path: '/api/alerting/workflows/{id}/_acknowledge/alerts',
+      validate: {
+        params: schema.object({
+          id: schema.string(),
+        }),
+        body: schema.any(),
+        query: createValidateQuerySchema(dataSourceEnabled),
+      },
+    },
+    monitorService.acknowledgeChainedAlerts
   );
 }

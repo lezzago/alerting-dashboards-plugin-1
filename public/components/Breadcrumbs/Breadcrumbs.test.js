@@ -5,13 +5,20 @@
 
 import React from 'react';
 import { mount, shallow } from 'enzyme';
-import { EuiBreadcrumbs } from '@elastic/eui';
+
+jest.mock('../../services', () => {
+  const actual = jest.requireActual('../../services');
+  return {
+    ...actual,
+    isPplAlertingEnabled: jest.fn(() => false),
+  };
+});
 
 import Breadcrumbs, {
   createEuiBreadcrumb,
-  getBreadcrumbs,
   parseLocationHash,
   getBreadcrumb,
+  getBreadcrumbs,
 } from './Breadcrumbs';
 import { historyMock, httpClientMock } from '../../../test/mocks';
 import { MONITOR_ACTIONS, TRIGGER_ACTIONS } from '../../utils/constants';
@@ -28,39 +35,10 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-describe('Breadcrumbs', () => {
-  const title = 'Alerting';
-  httpClientMock.get = jest.fn().mockResolvedValue({ ok: true, resp: { name: 'random monitor' } });
-  delete global.window.location;
-  global.window.location = { hash: '' };
-
-  test('renders', () => {
-    const wrapper = shallow(
-      <Breadcrumbs
-        title={title}
-        location={location}
-        httpClient={httpClientMock}
-        history={historyMock}
-      />
-    );
-
-    expect(wrapper).toMatchSnapshot();
-  });
-
-  test('calls getBreadcrumbs on mount and when pathname+search are updated', () => {
-    const getBreadcrumbs = jest.spyOn(Breadcrumbs.prototype, 'getBreadcrumbs');
-    const wrapper = mount(
-      <Breadcrumbs
-        title={title}
-        location={location}
-        httpClient={httpClientMock}
-        history={historyMock}
-      />
-    );
-
-    expect(getBreadcrumbs).toHaveBeenCalledTimes(1);
-    wrapper.setProps({ location: { ...location, search: '?search=new' } });
-    expect(getBreadcrumbs).toHaveBeenCalledTimes(2);
+describe('getBreadcrumbs', () => {
+  test('returns Eui formatted breadcrumbs', async () => {
+    window.location.hash = '#/dashboard';
+    expect(await getBreadcrumbs(httpClientMock, historyMock, {})).toMatchSnapshot();
   });
 });
 
@@ -103,10 +81,14 @@ describe('getBreadcrumb', () => {
 
   describe('when matching document IDs', () => {
     test('calls get monitor route', async () => {
+      const routeState = {}; // Provide a non-empty routeState object if necessary
       httpClientMock.get.mockResolvedValue({ ok: true, resp: { name: 'random_name' } });
-      await getBreadcrumb(monitorId, {}, httpClientMock);
+      await getBreadcrumb(monitorId, routeState, httpClientMock);
       expect(httpClientMock.get).toHaveBeenCalled();
-      expect(httpClientMock.get).toHaveBeenCalledWith(`../api/alerting/monitors/${monitorId}`);
+      expect(httpClientMock.get).toHaveBeenCalledWith(
+        `../api/alerting/monitors/${monitorId}`,
+        undefined
+      );
     });
 
     test('returns monitor name', async () => {
@@ -128,7 +110,7 @@ describe('getBreadcrumb', () => {
       httpClientMock.get.mockResolvedValue({ ok: true, resp: { name: 'random_name' } });
       expect(
         await getBreadcrumb(
-          `${monitorId}?action=${MONITOR_ACTIONS.UPDATE_MONITOR}`,
+          `${monitorId}?action=${MONITOR_ACTIONS.EDIT_MONITOR}`,
           {},
           httpClientMock
         )

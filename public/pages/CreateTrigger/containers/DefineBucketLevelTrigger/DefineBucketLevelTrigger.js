@@ -10,7 +10,7 @@ import { EuiAccordion, EuiButton, EuiSpacer, EuiText, EuiTitle } from '@elastic/
 import 'brace/mode/plain_text';
 import { FormikFieldText, FormikSelect } from '../../../../components/FormControls';
 import { hasError, isInvalid } from '../../../../utils/validate';
-import { SEARCH_TYPE } from '../../../../utils/constants';
+import { SEARCH_TYPE, SEVERITY_OPTIONS } from '../../../../utils/constants';
 import { FORMIK_INITIAL_TRIGGER_CONDITION_VALUES } from '../CreateTrigger/utils/constants';
 import AddTriggerConditionButton from '../../components/AddTriggerConditionButton';
 import BucketLevelTriggerGraph from '../../components/BucketLevelTriggerGraph';
@@ -20,7 +20,8 @@ import WhereExpression from '../../../CreateMonitor/components/MonitorExpression
 import { FieldArray } from 'formik';
 import ConfigureActions from '../ConfigureActions';
 import { inputLimitText } from '../../../../utils/helpers';
-import { DEFAULT_TRIGGER_NAME, SEVERITY_OPTIONS } from '../../utils/constants';
+import { DEFAULT_TRIGGER_NAME } from '../../utils/constants';
+import { getTriggerContext } from '../../utils/helper';
 
 const defaultRowProps = {
   label: 'Trigger name',
@@ -49,7 +50,6 @@ const selectInputProps = {
 };
 
 const propTypes = {
-  context: PropTypes.object.isRequired,
   executeResponse: PropTypes.object,
   monitorValues: PropTypes.object.isRequired,
   onRun: PropTypes.func.isRequired,
@@ -205,7 +205,6 @@ class DefineBucketLevelTrigger extends Component {
     const {
       edit,
       triggerArrayHelpers,
-      context,
       executeResponse,
       monitor,
       monitorValues,
@@ -222,6 +221,7 @@ class DefineBucketLevelTrigger extends Component {
       plugins,
     } = this.props;
     const fieldPath = triggerIndex !== undefined ? `triggerDefinitions[${triggerIndex}].` : '';
+    const context = getTriggerContext(executeResponse, monitor, triggerValues, triggerIndex);
     const isGraph = _.get(monitorValues, 'searchType') === SEARCH_TYPE.GRAPH;
     const response = _.get(executeResponse, 'input_results.results[0]');
     const triggerName = _.get(triggerValues, `${fieldPath}name`, DEFAULT_TRIGGER_NAME);
@@ -309,7 +309,14 @@ class DefineBucketLevelTrigger extends Component {
         <div style={{ padding: '0px 10px', paddingTop: '10px' }}>
           <FormikFieldText
             name={`${fieldPath}name`}
-            fieldProps={{ validate: validateTriggerName(triggers, triggerValues, fieldPath) }}
+            fieldProps={{
+              validate: (val) =>
+                validateTriggerName(
+                  triggerValues?.triggerDefinitions,
+                  triggerIndex,
+                  setFlyout != null
+                )(val),
+            }}
             formRow
             rowProps={defaultRowProps}
             inputProps={defaultInputProps}

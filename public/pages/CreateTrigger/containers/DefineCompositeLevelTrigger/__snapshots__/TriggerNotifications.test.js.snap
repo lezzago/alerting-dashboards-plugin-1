@@ -1,0 +1,28 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`TriggerNotifications renders 1`] = `
+Array [
+  <h4
+    class="euiTitle euiTitle--xsmall"
+  >
+    Notifications
+  </h4>,
+  <div
+    class="euiSpacer euiSpacer--m"
+  />,
+  <button
+    class="euiButton euiButton--primary euiButton--small"
+    type="button"
+  >
+    <span
+      class="euiButtonContent euiButton__content"
+    >
+      <span
+        class="euiButton__text"
+      >
+        Add notification
+      </span>
+    </span>
+  </button>,
+]
+`;

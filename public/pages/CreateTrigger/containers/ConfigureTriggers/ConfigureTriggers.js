@@ -4,66 +4,71 @@
  */
 
 import React from 'react';
-import { EuiHorizontalRule, EuiSpacer } from '@elastic/eui';
+import {
+  EuiHorizontalRule,
+  EuiSpacer,
+  EuiBadge,
+  EuiFlexGroup,
+  EuiFlexItem,
+  EuiSmallButtonIcon,
+} from '@elastic/eui';
 import ContentPanel from '../../../../components/ContentPanel';
 import _ from 'lodash';
 import DefineBucketLevelTrigger from '../DefineBucketLevelTrigger';
 import AddTriggerButton from '../../components/AddTriggerButton';
 import TriggerEmptyPrompt from '../../components/TriggerEmptyPrompt';
-import { MAX_TRIGGERS } from '../../../MonitorDetails/containers/Triggers/Triggers';
+import {
+  MAX_SERVERLESS_BUCKET_TRIGGERS,
+  MAX_TRIGGERS,
+} from '../../../MonitorDetails/containers/Triggers/Triggers';
 import DefineTrigger from '../DefineTrigger';
 import { MONITOR_TYPE, SEARCH_TYPE } from '../../../../utils/constants';
 import { getPathsPerDataType } from '../../../CreateMonitor/containers/DefineMonitor/utils/mappings';
 import monitorToFormik from '../../../CreateMonitor/containers/CreateMonitor/utils/monitorToFormik';
 import { buildRequest } from '../../../CreateMonitor/containers/DefineMonitor/utils/searchRequests';
 import { backendErrorNotification, inputLimitText } from '../../../../utils/helpers';
-import moment from 'moment';
-import { formikToTrigger } from '../CreateTrigger/utils/formikToTrigger';
 import DefineDocumentLevelTrigger from '../DefineDocumentLevelTrigger/DefineDocumentLevelTrigger';
 import {
   buildClusterMetricsRequest,
   canExecuteClusterMetricsMonitor,
-  getDefaultScript,
 } from '../../../CreateMonitor/components/ClusterMetricsMonitor/utils/clusterMetricsMonitorHelpers';
 import { FORMIK_INITIAL_VALUES } from '../../../CreateMonitor/containers/CreateMonitor/utils/constants';
+import { getDefaultScript } from '../../utils/helper';
+import DefineCompositeLevelTrigger from '../DefineCompositeLevelTrigger';
+import EnhancedAccordion from '../../../../components/FeatureAnywhereContextMenu/EnhancedAccordion';
+import { getDataSourceQueryObj } from '../../../../../public/pages/utils/helpers';
 
 class ConfigureTriggers extends React.Component {
   constructor(props) {
     super(props);
 
+    const firstTriggerId = _.get(props.triggerValues, 'triggerDefinitions[0].id');
+    const startTriggerIndex = 0;
+    const accordionsOpen = firstTriggerId ? { [startTriggerIndex]: true } : {};
+
     this.state = {
       dataTypes: {},
       executeResponse: null,
-      isBucketLevelMonitor:
-        _.get(props, 'monitor.monitor_type', MONITOR_TYPE.QUERY_LEVEL) ===
-        MONITOR_TYPE.BUCKET_LEVEL,
       triggerDeleted: false,
-      addTriggerButton: this.prepareAddTriggerButton(),
       triggerEmptyPrompt: this.prepareTriggerEmptyPrompt(),
+      currentSubmitCount: 0,
+      accordionsOpen,
+      TriggerContainer: props.flyoutMode
+        ? (props) => <EnhancedAccordion {...props} />
+        : ({ children }) => <>{children}</>,
+      ContentPanelStructure: props.flyoutMode ? ({ children }) => <>{children}</> : ContentPanel,
     };
 
     this.onQueryMappings = this.onQueryMappings.bind(this);
     this.onRunExecute = this.onRunExecute.bind(this);
-    this.prepareAddTriggerButton = this.prepareAddTriggerButton.bind(this);
     this.prepareTriggerEmptyPrompt = this.prepareTriggerEmptyPrompt.bind(this);
   }
 
   componentDidMount() {
-    const {
-      monitorValues: { searchType, uri },
-    } = this.props;
-    const { isBucketLevelMonitor } = this.state;
-    if (searchType === SEARCH_TYPE.CLUSTER_METRICS && canExecuteClusterMetricsMonitor(uri))
-      this.onRunExecute();
-    if (isBucketLevelMonitor) this.onQueryMappings();
+    this.monitorSetupByType();
   }
 
   componentDidUpdate(prevProps) {
-    const prevMonitorType = _.get(prevProps, 'monitor.monitor_type', MONITOR_TYPE.QUERY_LEVEL);
-    const currMonitorType = _.get(this.props, 'monitor.monitor_type', MONITOR_TYPE.QUERY_LEVEL);
-    if (prevMonitorType !== currMonitorType)
-      _.set(this.state, 'isBucketLevelMonitor', currMonitorType === MONITOR_TYPE.BUCKET_LEVEL);
-
     const prevSearchType = _.get(
       prevProps,
       'monitorValues.searchType',
@@ -84,42 +89,54 @@ class ConfigureTriggers extends React.Component {
       'monitorValues.uri.api_type',
       FORMIK_INITIAL_VALUES.uri.api_type
     );
-    if (prevSearchType !== currSearchType || prevApiType !== currApiType) {
-      switch (currSearchType) {
-        case SEARCH_TYPE.CLUSTER_METRICS:
-          _.set(this.state, 'addTriggerButton', this.prepareAddTriggerButton());
-          _.set(this.state, 'triggerEmptyPrompt', this.prepareTriggerEmptyPrompt());
-          break;
-      }
+    const prevMonitorType = _.get(
+      prevProps,
+      'monitorValues.monitor_type',
+      FORMIK_INITIAL_VALUES.monitor_type
+    );
+    const currMonitorType = _.get(
+      this.props,
+      'monitorValues.monitor_type',
+      FORMIK_INITIAL_VALUES.monitor_type
+    );
+
+    if (
+      prevSearchType !== currSearchType ||
+      prevApiType !== currApiType ||
+      prevMonitorType !== currMonitorType
+    ) {
+      this.setState({ triggerEmptyPrompt: this.prepareTriggerEmptyPrompt() });
     }
 
     const prevInputs = prevProps.monitor.inputs[0];
     const currInputs = this.props.monitor.inputs[0];
-    if (!_.isEqual(prevInputs, currInputs)) {
-      const { isBucketLevelMonitor } = this.state;
-      if (isBucketLevelMonitor) this.onQueryMappings();
-    }
+    if (!_.isEqual(prevInputs, currInputs)) this.monitorSetupByType();
   }
 
-  prepareAddTriggerButton = () => {
-    const { monitorValues, triggerArrayHelpers, triggerValues } = this.props;
-    const disableAddTriggerButton =
-      _.get(triggerValues, 'triggerDefinitions', []).length >= MAX_TRIGGERS;
-    return (
-      <AddTriggerButton
-        arrayHelpers={triggerArrayHelpers}
-        disabled={disableAddTriggerButton}
-        script={getDefaultScript(monitorValues)}
-      />
-    );
+  monitorSetupByType = () => {
+    const {
+      monitor: { monitor_type },
+      monitorValues: { uri },
+    } = this.props;
+    switch (monitor_type) {
+      case MONITOR_TYPE.BUCKET_LEVEL:
+        this.onQueryMappings();
+        break;
+      case MONITOR_TYPE.CLUSTER_METRICS:
+        const numOfTriggers = _.get(this.props.triggerValues, 'triggerDefinitions', []).length;
+        if (numOfTriggers > 0 && canExecuteClusterMetricsMonitor(uri)) this.onRunExecute();
+        break;
+    }
   };
 
   prepareTriggerEmptyPrompt = () => {
-    const { monitorValues, triggerArrayHelpers } = this.props;
+    const { monitorValues, triggerArrayHelpers, flyoutMode } = this.props;
     return (
       <TriggerEmptyPrompt
         arrayHelpers={triggerArrayHelpers}
+        monitorType={monitorValues.monitor_type}
         script={getDefaultScript(monitorValues)}
+        flyoutMode={flyoutMode}
       />
     );
   };
@@ -135,7 +152,7 @@ class ConfigureTriggers extends React.Component {
       case SEARCH_TYPE.QUERY:
       case SEARCH_TYPE.GRAPH:
         const searchRequest = buildRequest(formikValues);
-        _.set(monitorToExecute, 'inputs[0].search', searchRequest);
+        _.set(monitorToExecute, 'inputs[0]', searchRequest);
         break;
       case SEARCH_TYPE.CLUSTER_METRICS:
         const clusterMetricsRequest = buildClusterMetricsRequest(formikValues);
@@ -145,8 +162,12 @@ class ConfigureTriggers extends React.Component {
         console.log(`Unsupported searchType found: ${JSON.stringify(searchType)}`, searchType);
     }
 
+    const dataSourceQuery = getDataSourceQueryObj();
     httpClient
-      .post('../api/alerting/monitors/_execute', { body: JSON.stringify(monitorToExecute) })
+      .post('../api/alerting/monitors/_execute', {
+        body: JSON.stringify(monitorToExecute),
+        query: dataSourceQuery?.query,
+      })
       .then((resp) => {
         if (resp.ok) {
           this.setState({ executeResponse: resp.resp });
@@ -167,8 +188,10 @@ class ConfigureTriggers extends React.Component {
     }
 
     try {
+      const dataSourceQuery = getDataSourceQueryObj();
       const response = await this.props.httpClient.post('../api/alerting/_mappings', {
         body: JSON.stringify({ index }),
+        query: dataSourceQuery?.query,
       });
       if (response.ok) {
         return response.resp;
@@ -180,7 +203,7 @@ class ConfigureTriggers extends React.Component {
   }
 
   async onQueryMappings() {
-    const indices = this.props.monitor.inputs[0].search.indices;
+    const indices = this.props.monitor.inputs[0].search?.indices || [];
     try {
       const mappings = await this.queryMappings(indices);
       const dataTypes = getPathsPerDataType(mappings);
@@ -189,18 +212,6 @@ class ConfigureTriggers extends React.Component {
       console.error('There was an error getting mappings for query', err);
     }
   }
-
-  getTriggerContext = (executeResponse, monitor, values) => {
-    return {
-      periodStart: moment.utc(_.get(executeResponse, 'period_start', Date.now())).format(),
-      periodEnd: moment.utc(_.get(executeResponse, 'period_end', Date.now())).format(),
-      results: [_.get(executeResponse, 'input_results.results[0]')].filter((result) => !!result),
-      trigger: formikToTrigger(values, _.get(this.props.monitor, 'ui_metadata', {})),
-      alert: null,
-      error: null,
-      monitor: monitor,
-    };
-  };
 
   renderDefineTrigger = (triggerArrayHelpers, index) => {
     const {
@@ -215,14 +226,15 @@ class ConfigureTriggers extends React.Component {
       httpClient,
       notificationService,
       plugins,
+      flyoutMode,
+      submitCount,
+      errors,
     } = this.props;
-
     const { executeResponse } = this.state;
     return (
       <DefineTrigger
         edit={edit}
         triggerArrayHelpers={triggerArrayHelpers}
-        context={this.getTriggerContext(executeResponse, monitor, triggerValues)}
         executeResponse={executeResponse}
         monitor={monitor}
         monitorValues={monitorValues}
@@ -236,6 +248,9 @@ class ConfigureTriggers extends React.Component {
         notifications={notifications}
         notificationService={notificationService}
         plugins={plugins}
+        flyoutMode={flyoutMode}
+        submitCount={submitCount}
+        errors={errors}
       />
     );
   };
@@ -259,7 +274,6 @@ class ConfigureTriggers extends React.Component {
       <DefineBucketLevelTrigger
         edit={edit}
         triggerArrayHelpers={triggerArrayHelpers}
-        context={this.getTriggerContext(executeResponse, monitor, triggerValues)}
         executeResponse={executeResponse}
         monitor={monitor}
         monitorValues={monitorValues}
@@ -297,7 +311,6 @@ class ConfigureTriggers extends React.Component {
       <DefineDocumentLevelTrigger
         edit={edit}
         triggerArrayHelpers={triggerArrayHelpers}
-        context={this.getTriggerContext(executeResponse, monitor, triggerValues)}
         executeResponse={executeResponse}
         monitor={monitor}
         monitorValues={monitorValues}
@@ -316,8 +329,36 @@ class ConfigureTriggers extends React.Component {
     );
   };
 
+  renderCompositeLevelTrigger = (triggerArrayHelpers, index) => {
+    const {
+      edit,
+      monitorValues,
+      isDarkMode,
+      httpClient,
+      notifications,
+      notificationService,
+      plugins,
+      touched,
+    } = this.props;
+    return (
+      <DefineCompositeLevelTrigger
+        triggerArrayHelpers={triggerArrayHelpers}
+        triggerIndex={index}
+        edit={edit}
+        values={monitorValues}
+        touched={touched}
+        isDarkMode={isDarkMode}
+        httpClient={httpClient}
+        notifications={notifications}
+        notificationService={notificationService}
+        plugins={plugins}
+      />
+    );
+  };
+
   renderTriggers = (triggerArrayHelpers) => {
-    const { monitorValues, triggerValues } = this.props;
+    const { monitorValues, triggerValues, flyoutMode, errors, submitCount } = this.props;
+    const { triggerEmptyPrompt, TriggerContainer, accordionsOpen, currentSubmitCount } = this.state;
     const hasTriggers = !_.isEmpty(_.get(triggerValues, 'triggerDefinitions'));
 
     const triggerContent = (arrayHelpers, index) => {
@@ -326,48 +367,112 @@ class ConfigureTriggers extends React.Component {
           return this.renderDefineBucketLevelTrigger(arrayHelpers, index);
         case MONITOR_TYPE.DOC_LEVEL:
           return this.renderDefineDocumentLevelTrigger(arrayHelpers, index);
+        case MONITOR_TYPE.COMPOSITE_LEVEL:
+          return this.renderCompositeLevelTrigger(arrayHelpers, index);
         default:
           return this.renderDefineTrigger(arrayHelpers, index);
       }
     };
 
-    return hasTriggers ? (
-      triggerValues.triggerDefinitions.map((trigger, index) => {
-        return (
-          <div key={index}>
-            {triggerContent(triggerArrayHelpers, index)}
-            <EuiHorizontalRule margin={'s'} />
+    if (flyoutMode && submitCount > currentSubmitCount) {
+      for (let index in errors.triggerDefinitions) {
+        accordionsOpen[index] = !_.isEmpty(errors.triggerDefinitions[index]);
+      }
+    }
+
+    return hasTriggers
+      ? triggerValues.triggerDefinitions.map((trigger, index) => (
+          <div key={trigger.id}>
+            <TriggerContainer
+              {...{
+                id: `configure-trigger__${trigger.id}`,
+                isOpen: accordionsOpen[index],
+                onToggle: () => this.onAccordionToggle(index),
+                title: (
+                  <EuiFlexGroup alignItems="center" justifyContent="flexStart" gutterSize="s">
+                    <EuiFlexItem grow={false}>{trigger.name}</EuiFlexItem>
+                    <EuiFlexItem grow={false}>
+                      <EuiBadge color="hollow">SEV{trigger.severity}</EuiBadge>
+                    </EuiFlexItem>
+                  </EuiFlexGroup>
+                ),
+                extraAction: (
+                  <EuiSmallButtonIcon
+                    iconType="trash"
+                    color="text"
+                    aria-label={`Delete ${trigger.name}`}
+                    onClick={() => triggerArrayHelpers.remove(index)}
+                  />
+                ),
+              }}
+            >
+              {triggerContent(triggerArrayHelpers, index)}
+            </TriggerContainer>
+            {!flyoutMode && <EuiHorizontalRule margin={'s'} />}
+            {flyoutMode && <EuiSpacer size="m" />}
           </div>
-        );
-      })
-    ) : (
-      <TriggerEmptyPrompt arrayHelpers={triggerArrayHelpers} />
-    );
+        ))
+      : !flyoutMode && triggerEmptyPrompt;
+  };
+
+  onAccordionToggle = (key, isOnlyOpen) => {
+    let accordionsOpen = isOnlyOpen ? {} : { ...this.state.accordionsOpen };
+    accordionsOpen[key] = !accordionsOpen[key];
+    this.setState({ accordionsOpen, currentSubmitCount: this.props.submitCount });
   };
 
   render() {
-    const { triggerArrayHelpers, triggerValues } = this.props;
-    const { addTriggerButton } = this.state;
+    const { triggerArrayHelpers, triggerValues, flyoutMode, monitorValues } = this.props;
+    const { ContentPanelStructure } = this.state;
+    const monitorType = monitorValues.monitor_type;
+    const isComposite = monitorType === MONITOR_TYPE.COMPOSITE_LEVEL;
+
+    const maxTriggers =
+      monitorType === MONITOR_TYPE.BUCKET_LEVEL && this.props.isServerless
+        ? MAX_SERVERLESS_BUCKET_TRIGGERS
+        : MAX_TRIGGERS;
+
     const numOfTriggers = _.get(triggerValues, 'triggerDefinitions', []).length;
     const displayAddTriggerButton = numOfTriggers > 0;
+    const disableAddTriggerButton = numOfTriggers >= maxTriggers;
+
     return (
-      <ContentPanel
+      <ContentPanelStructure
         title={`Triggers (${numOfTriggers})`}
         titleSize={'s'}
-        panelStyles={{ paddingBottom: '0px', paddingLeft: '20px', paddingRight: '20px' }}
+        description={
+          isComposite
+            ? 'Triggers define the conditions that determine when a composite monitor should generate its own alert.'
+            : undefined
+        }
+        panelStyles={{ padding: '16px' }}
         bodyStyles={{ paddingLeft: '0px', padding: '10px' }}
         horizontalRuleClassName={'accordion-horizontal-rule'}
       >
         {this.renderTriggers(triggerArrayHelpers)}
-
-        {displayAddTriggerButton ? (
+        {flyoutMode && !disableAddTriggerButton && (
+          <AddTriggerButton
+            arrayHelpers={triggerArrayHelpers}
+            disabled={disableAddTriggerButton}
+            script={getDefaultScript(monitorValues)}
+            flyoutMode={flyoutMode}
+            monitorType={monitorType}
+            onPostAdd={(values) => this.onAccordionToggle(numOfTriggers, true)}
+          />
+        )}
+        {displayAddTriggerButton && !flyoutMode ? (
           <div style={{ paddingBottom: '20px', paddingTop: '15px' }}>
-            {addTriggerButton}
+            <AddTriggerButton
+              arrayHelpers={triggerArrayHelpers}
+              disabled={disableAddTriggerButton}
+              script={getDefaultScript(monitorValues)}
+              monitorType={monitorType}
+            />
             <EuiSpacer size={'s'} />
-            {inputLimitText(numOfTriggers, MAX_TRIGGERS, 'trigger', 'triggers')}
+            {inputLimitText(numOfTriggers, maxTriggers, 'trigger', 'triggers')}
           </div>
         ) : null}
-      </ContentPanel>
+      </ContentPanelStructure>
     );
   }
 }

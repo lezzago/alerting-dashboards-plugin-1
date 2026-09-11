@@ -16,6 +16,7 @@ import {
 import { MONITOR_TYPE, SEARCH_TYPE } from '../../../../../utils/constants';
 import { NOTIFY_OPTIONS_VALUES } from '../../../components/Action/actions/Message';
 import { FORMIK_INITIAL_ACTION_VALUES } from '../../../utils/constants';
+import { FORMIK_INITIAL_WHERE_EXPRESSION_VALUES } from '../../../../CreateMonitor/containers/CreateMonitor/utils/constants';
 
 export function formikToTrigger(values, monitorUiMetadata = {}) {
   const triggerDefinitions = _.get(values, 'triggerDefinitions');
@@ -34,6 +35,8 @@ export function formikToTriggerDefinition(values, monitorUiMetadata) {
       return formikToBucketLevelTrigger(values, monitorUiMetadata);
     case MONITOR_TYPE.DOC_LEVEL:
       return formikToDocumentLevelTrigger(values, monitorUiMetadata);
+    case MONITOR_TYPE.COMPOSITE_LEVEL:
+      return formikToCompositeLevelTrigger(values, monitorUiMetadata);
     default:
       return formikToQueryLevelTrigger(values, monitorUiMetadata);
   }
@@ -73,9 +76,23 @@ export function formikToBucketLevelTrigger(values, monitorUiMetadata) {
 
 export function formikToDocumentLevelTrigger(values, monitorUiMetadata) {
   const condition = formikToDocumentLevelTriggerCondition(values, monitorUiMetadata);
-  const actions = formikToAction(values);
+  const actions = formikToBucketLevelTriggerAction(values);
   return {
     document_level_trigger: {
+      id: values.id,
+      name: values.name,
+      severity: values.severity,
+      condition: condition,
+      actions: actions,
+    },
+  };
+}
+
+export function formikToCompositeLevelTrigger(values, monitorUiMetadata) {
+  const condition = formikToCompositeTriggerCondition(values, monitorUiMetadata);
+  const actions = formikToCompositeTriggerAction(values);
+  return {
+    chained_alert_trigger: {
       id: values.id,
       name: values.name,
       severity: values.severity,
@@ -98,6 +115,17 @@ export function formikToDocumentLevelTriggerCondition(values, monitorUiMetadata)
   };
 }
 
+export function formikToCompositeTriggerCondition(values) {
+  const triggerConditions = _.get(values, 'triggerConditions', '');
+
+  return {
+    script: {
+      lang: 'painless',
+      source: triggerConditions,
+    },
+  };
+}
+
 export function getDocumentLevelScriptSource(conditions) {
   const scriptSourceContents = [];
   conditions.forEach((condition) => {
@@ -108,8 +136,7 @@ export function getDocumentLevelScriptSource(conditions) {
     }
     if (!_.isEmpty(query) && !_.isEmpty(query.queryName)) {
       const queryExpression = _.get(query, 'expression');
-      const operator = query.operator === '!=' ? '!' : '';
-      scriptSourceContents.push(`${operator}query[${queryExpression}]`);
+      scriptSourceContents.push(`query[${queryExpression}]`);
     }
   });
   return scriptSourceContents.join(' ');
@@ -127,6 +154,51 @@ export function formikToAction(values) {
 }
 
 export function formikToBucketLevelTriggerAction(values) {
+  const actions = values.actions;
+  const executionPolicyPath = 'action_execution_policy.action_execution_scope';
+  if (actions && actions.length > 0) {
+    return actions.map((action) => {
+      let formattedAction = _.cloneDeep(action);
+
+      switch (formattedAction.throttle_enabled) {
+        case true:
+          _.set(formattedAction, 'throttle.unit', FORMIK_INITIAL_ACTION_VALUES.throttle.unit);
+          break;
+        case false:
+          formattedAction = _.omit(formattedAction, ['throttle']);
+          break;
+      }
+
+      const notifyOption = _.get(formattedAction, `${executionPolicyPath}`);
+      const notifyOptionId = _.isString(notifyOption) ? notifyOption : _.keys(notifyOption)[0];
+      switch (notifyOptionId) {
+        case NOTIFY_OPTIONS_VALUES.PER_ALERT:
+          const actionableAlerts = _.get(
+            formattedAction,
+            `${executionPolicyPath}.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`,
+            []
+          );
+          _.set(
+            formattedAction,
+            `${executionPolicyPath}.${NOTIFY_OPTIONS_VALUES.PER_ALERT}.actionable_alerts`,
+            actionableAlerts.map((entry) => entry.value)
+          );
+          break;
+        case NOTIFY_OPTIONS_VALUES.PER_EXECUTION:
+          _.set(
+            formattedAction,
+            `${executionPolicyPath}.${NOTIFY_OPTIONS_VALUES.PER_EXECUTION}`,
+            {}
+          );
+          break;
+      }
+      return formattedAction;
+    });
+  }
+  return actions;
+}
+
+export function formikToCompositeTriggerAction(values) {
   const actions = values.actions;
   const executionPolicyPath = 'action_execution_policy.action_execution_scope';
   if (actions && actions.length > 0) {
@@ -210,6 +282,7 @@ export function formikToTriggerUiMetadata(values, monitorUiMetadata) {
         bucketLevelTriggersUiMetadata[trigger.name] = triggerMetadata;
       });
       return bucketLevelTriggersUiMetadata;
+
     case MONITOR_TYPE.DOC_LEVEL:
       const docLevelTriggersUiMetadata = {};
       _.get(values, 'triggerDefinitions', []).forEach((trigger) => {
@@ -221,6 +294,13 @@ export function formikToTriggerUiMetadata(values, monitorUiMetadata) {
         docLevelTriggersUiMetadata[trigger.name] = triggerMetadata;
       });
       return docLevelTriggersUiMetadata;
+
+    case MONITOR_TYPE.COMPOSITE_LEVEL:
+      const compositeTriggersUiMetadata = {};
+      _.get(values, 'triggerDefinitions', []).forEach((trigger) => {
+        compositeTriggersUiMetadata[trigger.name] = _.get(trigger, 'triggerConditions', '');
+      });
+      return compositeTriggersUiMetadata;
   }
 }
 
@@ -334,15 +414,17 @@ export function getResultsPath(isCount) {
   return isCount ? HITS_TOTAL_RESULTS_PATH : AGGREGATION_RESULTS_PATH;
 }
 
-export function getCompositeAggFilter({ where }) {
-  const fieldName = _.get(where, 'fieldName', FORMIK_INITIAL_TRIGGER_VALUES.where.fieldName);
+export function getCompositeAggFilter({ filters = [] }) {
   const composite_agg_filter = {};
-  if (fieldName.length > 0) {
-    composite_agg_filter[where.fieldName[0].label] = {
-      [where.operator]: where.fieldValue,
-    };
-    return composite_agg_filter;
-  }
+  filters.forEach((filter) => {
+    const fieldName = _.get(filter, 'fieldName', FORMIK_INITIAL_WHERE_EXPRESSION_VALUES.fieldName);
+    if (fieldName.length > 0) {
+      composite_agg_filter[fieldName[0].label] = {
+        [filter.operator]: filter.fieldValue,
+      };
+    }
+  });
+  if (!_.isEmpty(composite_agg_filter)) return composite_agg_filter;
 }
 
 export function getRelationalOperator(thresholdEnum) {
